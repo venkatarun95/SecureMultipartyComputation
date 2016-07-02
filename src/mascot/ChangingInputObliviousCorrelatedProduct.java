@@ -1,10 +1,10 @@
 package mascot;
 
-//import java.util.Array;
 import java.lang.reflect.Array;
 import java.util.Arrays;
 import java.util.ArrayList;
 import java.security.SecureRandom;
+import java.io.IOException;
 
 import edu.biu.scapi.comm.Channel;
 import edu.biu.scapi.comm.twoPartyComm.SocketPartyData;
@@ -35,8 +35,8 @@ public class ChangingInputObliviousCorrelatedProduct {
 		 */
 		public ChangingInputObliviousCorrelatedProduct (String ipAddr, int port, int a_securityK) {
 				securityK = 8*(a_securityK / 8);
-				sharedRand0 = new SecureRandom[securityK / 8];
-				sharedRand1 = new SecureRandom[securityK / 8];
+				sharedRand0 = new SecureRandom[securityK];
+				sharedRand1 = new SecureRandom[securityK];
 
 				// Select random seeds
 				SecureRandom random = new SecureRandom();
@@ -56,8 +56,8 @@ public class ChangingInputObliviousCorrelatedProduct {
 						if (i % (securityK / 8) == securityK / 8 - 1 && i > 0) {
 								seeds0.add(tempSeed0);
 								seeds1.add(tempSeed1);
-								sharedRand0[i / 8] = new SecureRandom(tempSeed0));
-								sharedRand1[i / 8] = new SecureRandom(tempSeed1));
+								sharedRand0[i * 8 / securityK] = new SecureRandom(tempSeed0);
+								sharedRand1[i * 8 / securityK] = new SecureRandom(tempSeed1);
 								tempSeed0 = new byte[securityK / 8];
 								tempSeed1 = new byte[securityK / 8];
 						}						
@@ -84,26 +84,55 @@ public class ChangingInputObliviousCorrelatedProduct {
 		 * party to the other.
 		 * @param List of x_i s. Each x_i must be of size securityK.
 		 * @param channel Channel to use.
-		 * @return List of shares. Each share is a securityK sized vector
-		 * of securityK bit values.
+		 * @return List of shares. Each share is a securityK bit value
+		 * (index 0 is MSB).
 		 */
-		public ArrayList<byte[][]> Extend(ArrayList<byte[]> xList, Channel channel) {
+		public ArrayList<byte[]> extend(ArrayList<byte[]> xList, Channel channel) throws IOException {
 				ArrayList<byte[]> result = new ArrayList<byte[]>();
 				for (byte[] x : xList) {
-						if (x.length != SecurityK / 8)
+						if (x.length != securityK / 8)
 								throw new RuntimeException("Incorrect length of x_i. Expecting securityK bits");
 						byte[] t0 = new byte[securityK / 8], t1 = new byte[securityK / 8];
-						byte[] toSend = new byte[securityK];
-						byte[][] t = new byte[securityK][securityK];
+						byte[] toSend = new byte[securityK / 8];
+						byte[] share = new byte[securityK / 8];
 						for (int i = 0; i < securityK; ++i) {
 								sharedRand0[i].nextBytes(t0);
 								sharedRand1[i].nextBytes(t1);
-								result.add(t0);
-								for (int i = 0; i < securityK / 8; ++i)
-										toSend[i] = t0[i] - t1[i] + x[i];
+
+                // Shift t0 left by i bits
+                // First shift the bytes
+                for (int k = 0; k < securityK / 8; ++k) {
+                    if (k + i / 8 < securityK / 8)
+                        t0[k] = t0[k + i / 8];
+                    else
+                        t0[k] = 0;
+                }
+                // Now shift the bits
+                for (int k = 0; k < securityK / 8; ++k) {
+                    t0[k] = (byte)(t0[k] << (i % 8));
+                    if (k + 1 < securityK / 8)
+                        t0[k] |= (byte)((t0[k + 1] >> (8 - (i % 8)))
+                                           & ((1 << (i % 8)) - 1));
+                }
+                // And the component to the share
+                int carry = 0;
+                for (int k = securityK / 8 - 1; k >= 0; --k) {
+                    if ((int)t0[k] + share[k] + carry > 255)
+                        carry = 1;
+                    else
+                        carry = 0;
+                    share[k] += t0[k] + carry;
+                }
+
+
+                for (int j = 0; j < securityK / 8; ++j)
+										toSend[j] = (byte)(t0[j] - t1[j] + x[j]);
 								channel.send(toSend);
 						}
-						
+						result.add(share);
 				}
+
+        //for (byte[] x : result) 
+				return result;
 		}
 };
