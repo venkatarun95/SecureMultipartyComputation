@@ -3,6 +3,8 @@ package mascot;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.ArrayList;
+import java.math.BigInteger;
 
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
@@ -62,15 +64,16 @@ public class Player {
 				if (((SocketPartyData)parties.get(0)).getPort() == 8000)
 						otherParty = 1;
 				if (otherParty == 0) {
-						ChangingInputObliviousCorrelatedProduct changingOT = new ChangingInputObliviousCorrelatedProduct("127.0.0.1", 8889,
-																																																						 connections.get(parties.get(1)).values().iterator().next(),
-																																																						 16);
+						ChangingInputObliviousCorrelatedProduct changingOT = new ChangingInputObliviousCorrelatedProduct("127.0.0.1", 8889, 64);
+            ArrayList<BigInteger> xs = new ArrayList<BigInteger>();
+            xs.add(new BigInteger("45"));
+						xs.add(new BigInteger("3"));
+						xs.add(new BigInteger("100"));
+            changingOT.extend(xs, testC);
 				}
 				else {
-						FixedInputObliviousCorrelatedProduct fixedOT = new FixedInputObliviousCorrelatedProduct("127.0.0.1", 8889,
-																																																		connections.get(parties.get(1)).values().iterator().next(),
-																																																		new byte[] {10, 3},
-																																																		16);
+						FixedInputObliviousCorrelatedProduct fixedOT = new FixedInputObliviousCorrelatedProduct("127.0.0.1", 8889, new BigInteger("278"), 64);
+            fixedOT.extend(3, testC);
 				}
     }
 }

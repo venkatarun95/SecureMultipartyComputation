@@ -3,8 +3,11 @@ package mascot;
 import java.lang.reflect.Array;
 import java.util.Arrays;
 import java.util.ArrayList;
+import java.math.BigInteger;
 import java.security.SecureRandom;
+import java.util.Random;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 import edu.biu.scapi.comm.Channel;
 import edu.biu.scapi.comm.twoPartyComm.SocketPartyData;
@@ -19,7 +22,9 @@ import edu.biu.scapi.interactiveMidProtocols.ot.otBatch.otExtension.OTExtensionM
 public class ChangingInputObliviousCorrelatedProduct {
 		private int securityK;
 		private ArrayList<byte[]> seeds0, seeds1;
-		private SecureRandom[] sharedRand0, sharedRand1;
+		// WARNING: This is a stop-gap solution only. Use a
+		// cryptographically strong generator in production.
+		private Random[] sharedRand0, sharedRand1;
 
 		/**
 		 * Runs the initialization step. All calls to extend afterward are
@@ -35,11 +40,11 @@ public class ChangingInputObliviousCorrelatedProduct {
 		 */
 		public ChangingInputObliviousCorrelatedProduct (String ipAddr, int port, int a_securityK) {
 				securityK = 8*(a_securityK / 8);
-				sharedRand0 = new SecureRandom[securityK];
-				sharedRand1 = new SecureRandom[securityK];
+				sharedRand0 = new Random[securityK];
+				sharedRand1 = new Random[securityK];
 
 				// Select random seeds
-				SecureRandom random = new SecureRandom();
+				Random random = new Random();
 				byte[] serSeeds0 = new byte[securityK * securityK / 8];
 				byte[] serSeeds1 = new byte[securityK * securityK / 8];
 				random.nextBytes(serSeeds0);
@@ -53,11 +58,11 @@ public class ChangingInputObliviousCorrelatedProduct {
 				for (int i = 0; i < securityK * securityK / 8; ++i) {
 						tempSeed0[i % (securityK / 8)] = serSeeds0[i];
 						tempSeed1[i % (securityK / 8)] = serSeeds1[i];
-						if (i % (securityK / 8) == securityK / 8 - 1 && i > 0) {
+						if (i % (securityK / 8) == securityK / 8 - 1) {
 								seeds0.add(tempSeed0);
 								seeds1.add(tempSeed1);
-								sharedRand0[i * 8 / securityK] = new SecureRandom(tempSeed0);
-								sharedRand1[i * 8 / securityK] = new SecureRandom(tempSeed1);
+								sharedRand0[i * 8 / securityK] = new Random(ByteBuffer.wrap(tempSeed0).getLong());
+								sharedRand1[i * 8 / securityK] = new Random(ByteBuffer.wrap(tempSeed1).getLong());
 								tempSeed0 = new byte[securityK / 8];
 								tempSeed1 = new byte[securityK / 8];
 						}						
@@ -87,52 +92,29 @@ public class ChangingInputObliviousCorrelatedProduct {
 		 * @return List of shares. Each share is a securityK bit value
 		 * (index 0 is MSB).
 		 */
-		public ArrayList<byte[]> extend(ArrayList<byte[]> xList, Channel channel) throws IOException {
-				ArrayList<byte[]> result = new ArrayList<byte[]>();
-				for (byte[] x : xList) {
-						if (x.length != securityK / 8)
+		public ArrayList<BigInteger> extend(ArrayList<BigInteger> xList, Channel channel) throws IOException {
+				ArrayList<BigInteger> result = new ArrayList<BigInteger>();
+				for (BigInteger x : xList) {
+						if (x.bitLength() > securityK / 8)
 								throw new RuntimeException("Incorrect length of x_i. Expecting securityK bits");
 						byte[] t0 = new byte[securityK / 8], t1 = new byte[securityK / 8];
-						byte[] toSend = new byte[securityK / 8];
-						byte[] share = new byte[securityK / 8];
+						BigInteger share = new BigInteger("0");
 						for (int i = 0; i < securityK; ++i) {
 								sharedRand0[i].nextBytes(t0);
 								sharedRand1[i].nextBytes(t1);
-
-                // Shift t0 left by i bits
-                // First shift the bytes
-                for (int k = 0; k < securityK / 8; ++k) {
-                    if (k + i / 8 < securityK / 8)
-                        t0[k] = t0[k + i / 8];
-                    else
-                        t0[k] = 0;
-                }
-                // Now shift the bits
-                for (int k = 0; k < securityK / 8; ++k) {
-                    t0[k] = (byte)(t0[k] << (i % 8));
-                    if (k + 1 < securityK / 8)
-                        t0[k] |= (byte)((t0[k + 1] >> (8 - (i % 8)))
-                                           & ((1 << (i % 8)) - 1));
-                }
-                // And the component to the share
-                int carry = 0;
-                for (int k = securityK / 8 - 1; k >= 0; --k) {
-                    if ((int)t0[k] + share[k] + carry > 255)
-                        carry = 1;
-                    else
-                        carry = 0;
-                    share[k] += t0[k] + carry;
-                }
-
-
-                for (int j = 0; j < securityK / 8; ++j)
-										toSend[j] = (byte)(t0[j] - t1[j] + x[j]);
+								BigInteger toSend = new BigInteger(t0);
+								toSend = toSend.add(new BigInteger(t1).negate());
+								toSend = toSend.add(x).mod(new BigInteger("2").pow(securityK));
 								channel.send(toSend);
+
+								share = share.add((new BigInteger(t0)).negate().shiftLeft(i)).mod(new BigInteger("2").pow(securityK));
 						}
 						result.add(share);
 				}
 
-        //for (byte[] x : result) 
+        for (BigInteger x : result)  {
+            System.out.println(x);
+        }
 				return result;
 		}
 };
