@@ -1,0 +1,71 @@
+<project name="Escrow" basedir="." default="main">
+	
+  <property name="src.dir"     value="src"/>
+	<property name="test.dir"     value="test"/>
+
+  <property name="build.dir"   value="build"/>
+  <property name="classes.dir" value="${build.dir}/classes"/>
+  <property name="jar.dir"     value="${build.dir}/jar"/>
+	
+  <property name="main-class"  value="pederson.main"/>
+	
+  <property name="scapi.lib.dir"     value="scapi/assets"/>
+	<property name="misc.lib.dir"     value="lib"/>
+	
+  <path id="classpath">
+    <fileset dir="${scapi.lib.dir}" includes="**/*.jar"/>
+		<fileset dir="${misc.lib.dir}" includes="**/*.jar"/>
+  </path>
+	<path id="application" location="${jar.dir}/${ant.project.name}.jar"/>
+	
+  <target name="clean">
+    <delete dir="${build.dir}"/>
+  </target>
+	
+  <target name="compile">
+    <mkdir dir="${classes.dir}"/>
+    <javac srcdir="${src.dir}" destdir="${classes.dir}" classpathref="classpath" debug="on"/>
+		<javac srcdir="${test.dir}" destdir="${classes.dir}" classpathref="classpath" debug="on"/>
+  </target>
+	
+  <target name="jar" depends="compile">
+    <mkdir dir="${jar.dir}"/>
+    <jar destfile="${jar.dir}/${ant.project.name}.jar" basedir="${classes.dir}">
+      <manifest>
+          <attribute name="Main-Class" value="${main-class}"/>
+      </manifest>
+    </jar>
+  </target>
+	
+	<target name="test" depends="jar">
+		<junit>
+      <classpath>
+        <path refid="classpath"/>
+        <path refid="application"/>
+      </classpath>
+
+			<assertions>
+				<enable/>
+			</assertions>
+      <formatter type="plain" usefile="false" /> <!-- to screen -->
+      <formatter type="plain" /> <!-- to file -->
+			<!-- <test name="test.PedersonShareTest"/> -->
+      
+      <batchtest fork="yes">
+        <fileset dir="${test.dir}" includes="*Test.java"/>
+      </batchtest>
+    </junit>
+	</target>
+	
+  <target name="run" depends="jar">
+    <java jar="${jar.dir}/${ant.project.name}.jar" fork="true">
+			<arg value="socketParties0.properties"/>
+		</java><!-- line="socketParties0.properties"/> -->
+		<java jar="${jar.dir}/${ant.project.name}.jar" fork="true"/>
+  </target>
+	
+  <target name="clean-build" depends="clean,jar,test"/>
+	
+  <target name="main" depends="clean,run"/>
+		
+</project>
