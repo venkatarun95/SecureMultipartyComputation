@@ -1,5 +1,6 @@
 package pederson;
 
+import java.util.Arrays;
 import java.math.BigInteger;
 import java.security.SecureRandom;
 
@@ -11,8 +12,8 @@ import edu.biu.scapi.primitives.dlog.GroupElement;
 
 public class PedersonShare {
 		// Group over which we operate
-		private static final BigInteger mod = new BigInteger("2698727"); //982451653");
-		private static final BigInteger modQ = mod.subtract(BigInteger.ONE).divide(new BigInteger("2"));
+		public static final BigInteger mod = new BigInteger("2698727"); //982451653");
+		public static final BigInteger modQ = mod.subtract(BigInteger.ONE).divide(new BigInteger("2"));
 		// Group generators
 		static private BigInteger genData = new BigInteger("2");
 		static private BigInteger genVerif = new BigInteger("4");
@@ -27,11 +28,12 @@ public class PedersonShare {
 		// Number of shares required to reconstruct a secret
 		private int threshold;
 
+		// Copy constructor
 		private PedersonShare(BigInteger a_valData, BigInteger a_valVerif, BigInteger a_index, BigInteger[] a_commitments, int a_threshold) {
 				valData = a_valData;
 				valVerif = a_valVerif;
 				index = a_index;
-				commitments = a_commitments;
+				commitments = Arrays.copyOf(a_commitments, a_commitments.length);
 				threshold = a_threshold;
 		}
 		
@@ -56,6 +58,32 @@ public class PedersonShare {
 						result = result.add(coeff.multiply(mul).mod(modQ)).mod(modQ);
 						mul = mul.multiply(point);
 				}
+				return result;
+		}
+
+		public PedersonShare add(PedersonShare other) {
+				if (index != other.index)
+						throw new RuntimeException("Can only add shares if they have the same index.");
+				if (threshold != other.threshold)
+						throw new RuntimeException("Thresholds for the two shares are different. They may belong to different polynomials.");
+				PedersonShare result = new PedersonShare(valData.add(other.valData).mod(modQ),
+																								 valVerif.add(other.valVerif).mod(modQ),
+																								 index,
+																								 commitments,
+																								 threshold);
+				for (int i = 0; i < commitments.length; ++i)
+						result.commitments[i] = result.commitments[i].multiply(other.commitments[i]);
+				return result;
+		}
+
+		public PedersonShare constMultiply(BigInteger c) {
+				PedersonShare result = new PedersonShare(valData.multiply(c).mod(modQ),
+																								 valVerif.multiply(c).mod(modQ),
+																								 index,
+																								 commitments,
+																								 threshold);
+				for (int i = 0; i < commitments.length; ++i)
+						result.commitments[i] = result.commitments[i].modPow(c, mod);
 				return result;
 		}
 
