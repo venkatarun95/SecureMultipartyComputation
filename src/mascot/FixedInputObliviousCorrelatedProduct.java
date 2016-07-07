@@ -38,9 +38,8 @@ public class FixedInputObliviousCorrelatedProduct {
 				if (delta.bitLength() > securityK)
 						throw new RuntimeException("Delta too long. Expected securityK bits.");
 				byte[] delta_split = new byte[securityK];
-				for (int i = 0; i < securityK; ++i) {
-						delta_split[i] = (delta.testBit(i))?(byte)1:(byte)0;//(byte)((delta[i / 8] >> (i % 8)) & 1);
-				}
+				for (int i = 0; i < securityK; ++i)
+						delta_split[i] = (delta.testBit(i))?(byte)1:(byte)0;
 
 				// Do the OTs
 				OTBatchROutput outputs = ot.transfer(null, new OTExtensionGeneralRInput(delta_split, securityK));
@@ -71,9 +70,6 @@ public class FixedInputObliviousCorrelatedProduct {
     /**
      *  Returns additive shares of x_i s.\Delta, where \Delta is the
      *  fixed input of this player<p>
-     *
-     *  Note: In the byte array, 0th index is treated as most
-     *  significant byte.
      */
 		public ArrayList<BigInteger> extend(int numShares, Channel channel) throws IOException {
         ArrayList<BigInteger> result = new ArrayList<BigInteger>();

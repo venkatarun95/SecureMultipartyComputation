@@ -95,8 +95,8 @@ public class ChangingInputObliviousCorrelatedProduct {
 		public ArrayList<BigInteger> extend(ArrayList<BigInteger> xList, Channel channel) throws IOException {
 				ArrayList<BigInteger> result = new ArrayList<BigInteger>();
 				for (BigInteger x : xList) {
-						if (x.bitLength() > securityK / 8)
-								throw new RuntimeException("Incorrect length of x_i. Expecting securityK bits");
+						if (x.bitLength() > securityK)
+								throw new RuntimeException("Incorrect length of x_i. Expecting securityK bits. " + x.bitLength() + " vs " + securityK + " bits");
 						byte[] t0 = new byte[securityK / 8], t1 = new byte[securityK / 8];
 						BigInteger share = new BigInteger("0");
 						for (int i = 0; i < securityK; ++i) {

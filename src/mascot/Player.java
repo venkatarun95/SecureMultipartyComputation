@@ -69,11 +69,14 @@ public class Player {
             xs.add(new BigInteger("45"));
 						xs.add(new BigInteger("3"));
 						xs.add(new BigInteger("100"));
+						for (int i = 3;i < 100000; ++i)
+								xs.add(BigInteger.valueOf(i));
+						System.out.println(xs.size());
             changingOT.extend(xs, testC);
 				}
 				else {
 						FixedInputObliviousCorrelatedProduct fixedOT = new FixedInputObliviousCorrelatedProduct("127.0.0.1", 8889, new BigInteger("278"), 64);
-            fixedOT.extend(3, testC);
+            fixedOT.extend(100000, testC);
 				}
     }
 }
