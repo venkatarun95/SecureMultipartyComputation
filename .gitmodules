@@ -1,0 +1,3 @@
+[submodule "scapi"]
+	path = scapi
+	url = https://github.com/cryptobiu/scapi.git
