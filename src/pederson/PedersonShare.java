@@ -1,8 +1,9 @@
 package pederson;
 
-import java.util.Arrays;
+import java.io.Serializable;
 import java.math.BigInteger;
 import java.security.SecureRandom;
+import java.util.Arrays;
 
 import org.bouncycastle.util.BigIntegers;
 
@@ -10,23 +11,30 @@ import edu.biu.scapi.exceptions.CheatAttemptException;
 import edu.biu.scapi.primitives.dlog.DlogGroup;
 import edu.biu.scapi.primitives.dlog.GroupElement;
 
-public class PedersonShare {
+public class PedersonShare implements Serializable {
 		// Group over which we operate
 		public static final BigInteger mod = new BigInteger("2698727"); //982451653");
 		public static final BigInteger modQ = mod.subtract(BigInteger.ONE).divide(new BigInteger("2"));
 		// Group generators
-		static private BigInteger genData = new BigInteger("2");
-		static private BigInteger genVerif = new BigInteger("4");
+		public static BigInteger genData = new BigInteger("2");
+		public static BigInteger genVerif = new BigInteger("4");
 
+		// Note: `PedersonMultiply` needs to access `valData`, `valVerif`
+		// and `threshold`, so we give access to there within this
+		// (pederson) package.
+		//
+		// @see pederson.PedersonComm needs commitments (to verify they
+		// are all the same)
+		
 		// Value of data-containing polynomial at `index`
-		private BigInteger valData;
+		BigInteger valData;
 		// Value of verifying zero polynomial at `index`
-		private BigInteger valVerif;
-		private BigInteger index;
+		BigInteger valVerif;
+		BigInteger index;
 		// Commitments to make sure sharing is valid
-		private BigInteger[] commitments;
+		BigInteger[] commitments;
 		// Number of shares required to reconstruct a secret
-		private int threshold;
+		int threshold;
 
 		// Copy constructor
 		private PedersonShare(BigInteger a_valData, BigInteger a_valVerif, BigInteger a_index, BigInteger[] a_commitments, int a_threshold) {
@@ -36,17 +44,21 @@ public class PedersonShare {
 				commitments = Arrays.copyOf(a_commitments, a_commitments.length);
 				threshold = a_threshold;
 		}
-		
-		private void validate() throws CheatAttemptException {
+
+		BigInteger computeMac() {
 				BigInteger mac = BigInteger.ONE;
 				BigInteger exp = BigInteger.ONE;
 				for (int i = 0; i < commitments.length; ++i) {
 						mac = mac.multiply(commitments[i].modPow(exp, mod)).mod(mod);
 						exp = exp.multiply(index);
 				}
+				return mac;
+		}
+		
+		private void validate() throws CheatAttemptException {				
 				BigInteger rhs = genData.modPow(valData, mod);
 				rhs = rhs.multiply(genVerif.modPow(valVerif, mod)).mod(mod);
-				if (mac.compareTo(rhs) != 0)
+				if (computeMac().compareTo(rhs) != 0)
 						throw new CheatAttemptException("The commitments do not match the given values!");
 		}
 
@@ -62,8 +74,8 @@ public class PedersonShare {
 		}
 
 		public PedersonShare add(PedersonShare other) {
-				if (index != other.index)
-						throw new RuntimeException("Can only add shares if they have the same index.");
+				if (index.compareTo(other.index) != 0)
+						throw new RuntimeException("Can only add shares if they have the same index. Here we have " + index + ", " + other.index);
 				if (threshold != other.threshold)
 						throw new RuntimeException("Thresholds for the two shares are different. They may belong to different polynomials.");
 				PedersonShare result = new PedersonShare(valData.add(other.valData).mod(modQ),
@@ -87,6 +99,19 @@ public class PedersonShare {
 				return result;
 		}
 
+		static boolean verifyCommitmentEquality(PedersonShare[] shares) {
+				assert shares != null && shares.length > 0;
+				BigInteger[] commitments = shares[0].commitments;
+				for (int i = 1; i < commitments.length; ++i) {
+						if (commitments.length != shares[i].commitments.length)
+								return false;
+						for (int j = 0; j < commitments.length; ++j)
+								if (commitments[j].compareTo(shares[i].commitments[j]) != 0)
+										return false;
+				}
+				return true;
+		}
+		
 		public static PedersonShare[] shareValue(BigInteger val, int threshold, int numShares) {
 				BigInteger[] polyData = new BigInteger[threshold];
 				BigInteger[] polyVerif = new BigInteger[threshold];
@@ -113,7 +138,7 @@ public class PedersonShare {
 				}
 				return result;
 		}
-
+		
 		public static BigInteger combineShares(PedersonShare[] shares) {
 				// Run some checks
 				if (shares == null || shares.length == 0)
