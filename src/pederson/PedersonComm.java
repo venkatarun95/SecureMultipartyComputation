@@ -2,10 +2,14 @@ package pederson;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.lang.ClassCastException;
 import java.math.BigInteger;
+import java.security.SecureRandom;
+import java.util.Arrays;
 
 import edu.biu.scapi.comm.Channel;
 import edu.biu.scapi.exceptions.CheatAttemptException;
+import edu.biu.scapi.primitives.hash.openSSL.OpenSSLSHA512;
 
 import pederson.PedersonShare;
 
@@ -16,6 +20,8 @@ public class PedersonComm {
 		//
 		// - Check that only one element of 'channels' is null
 		//   (corresponding to current player)
+
+		private static SecureRandom random = new SecureRandom();
 		
 		/**
 		 * Verify that all players have got the same
@@ -66,7 +72,96 @@ public class PedersonComm {
 				}
 				return true;
 		}
-		
+
+		/**
+		 * Utility function to handle exceptions from the @reference
+		 * Channel.receive method
+		 */
+		static private <T> T receive(Channel channel) throws IOException {
+				assert channel != null;
+				try {
+						Serializable res = channel.receive();
+						return (T)res;
+				}
+				catch (ClassNotFoundException e) {
+						throw new IOException(e.getMessage());
+				}
+		}
+
+		/**
+		 * Toss <code>numbits</code> shared coins among all parties.<p>
+		 * 
+		 * No party can control what the result is. The toss is random as
+		 * long as at-least one party is honest.
+		 *
+		 * TODO(venkat): If somebody gives different commitment/random
+		 * strings to different people, current implementation detects it
+		 * but does not specify who cheated.
+		 *
+		 * @param numBits Number of bits worth of coins to toss (in
+		 * parallel)
+		 */
+		private static byte[] coinToss(int numBits, Channel[] channels) throws IOException {
+				// Choose our random bits and hash them
+				byte[] myRandBits = new byte[1 + (numBits - 1) / 8];
+				random.nextBytes(myRandBits);
+				OpenSSLSHA512 commitHash = new OpenSSLSHA512();
+				commitHash.update(myRandBits, 0, myRandBits.length);
+				byte[] myCommitment = new byte[commitHash.getHashedMsgSize()];
+				commitHash.hashFinal(myCommitment, 0);
+				
+				// Broadcast commitment
+				for (Channel channel : channels)
+						if (channel != null)
+								channel.send((Serializable) myCommitment);
+
+				// Get other's commitments
+				byte[][] commitments = new byte[channels.length][];
+				for (int i = 0; i < channels.length; ++i)
+						if (channels[i] != null)
+								commitments[i] = receive(channels[i]);
+
+				// Broadcast actual bits
+				for (Channel channel : channels)
+						if (channel != null)
+								channel.send((Serializable) myRandBits);
+
+				// Get other's actual bits, verify commitment and find xor of
+				// everybody's random strings.
+				byte[] result = myRandBits.clone();
+				for (int i = 0; i < channels.length; ++i) {
+						if (channels[i] == null)
+								continue;
+						byte[] randBits = receive(channels[i]);
+						
+						commitHash = new OpenSSLSHA512();
+						commitHash.update(randBits, 0, myRandBits.length);
+						byte[] expectedCommitment = new byte[myRandBits.length];
+						commitHash.hashFinal(expectedCommitment, 0);
+						if (!Arrays.equals(expectedCommitment, commitments[i]))
+								throw new CheatAttemptException("Decommitment does not match commitment while coin tossing.");
+
+						for (int j = 0; j < result.length; ++j)
+								result[j] = (byte)(result[j] ^ randBits[j]);
+				}
+
+				// Broadcast our random value
+				for (Channel channel : channels)
+						if (channel != null)
+								channel.send((Serializable) result);
+
+				// Get other's random values and compare if they are the same
+				for (Channel channel : channels) {
+						if (channel == null)
+								continue;
+						byte[] othersResult = receive(channel);
+						if (!Arrays.equals(result, othersResult))
+								throw new CheatAttemptException("Somebody gave different 'broadcasts' to different people.");
+				}
+
+				return result;
+		}
+
 		/**
 		 * Give the ith share to the player in the ith channel.
 		 *
@@ -158,5 +253,9 @@ public class PedersonComm {
 				if (!PedersonShare.verifyCommitmentEquality(shares))
 						throw new CheatAttemptException("Everbody's public commitments are not the same");
 				return PedersonShare.combineShares(shares);
+		}
+
+		public static PedersonShare multiply(PedersonShare val1, PedersonShare val2, Channel[] channels) {
+				return null;
 		}
 }
