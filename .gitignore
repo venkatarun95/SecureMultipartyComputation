@@ -1,0 +1,11 @@
+# Temporary files
+*~*
+*#*
+
+# Java files
+*.class
+build
+*TEST-*
+
+# Misc
+*.properties
