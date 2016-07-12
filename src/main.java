@@ -80,7 +80,7 @@ public class main {
 						val2 = shares[1];
 						PedersonComm.shareSender(shares, channels);
 				}
-				else {
+				else { 
 						val2 = PedersonComm.shareReceiver(1, channels);
 				}
 
@@ -88,5 +88,10 @@ public class main {
 				PedersonShare res = val1.add(val2.constMultiply(new BigInteger("11")));
 
 				System.out.println(PedersonComm.combineShares(res, 2, channels));
+
+				// Now multiply two values and open share
+				PedersonShare mult = PedersonComm.multiply(val1, res, channels);
+				
+				System.out.println("Product: " + PedersonComm.combineShares(mult, 2, channels) + " : ");
 		}
 }
