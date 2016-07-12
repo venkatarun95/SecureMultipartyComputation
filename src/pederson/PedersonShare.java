@@ -45,6 +45,13 @@ public class PedersonShare implements Serializable {
 				threshold = a_threshold;
 		}
 
+		/**
+		 * Computes MAC at a given index using commitments.<p>
+		 *
+		 * If the polynomials represented by this share are f(x), f'(x),
+		 * returns g^f(indexAt) * h^f'(indexAt) where g =
+		 * <code>genData</code> and h = <code>genVerif</code>.
+		 */
 		BigInteger computeMac(BigInteger indexAt) {
 				BigInteger mac = BigInteger.ONE;
 				BigInteger exp = BigInteger.ONE;
@@ -54,7 +61,10 @@ public class PedersonShare implements Serializable {
 				}
 				return mac;
 		}
-		
+
+		/**
+		 * Verifies the MAC values.
+		 */
 		void validate() throws CheatAttemptException {				
 				BigInteger rhs = genData.modPow(valData, mod);
 				rhs = rhs.multiply(genVerif.modPow(valVerif, mod)).mod(mod);
@@ -62,6 +72,12 @@ public class PedersonShare implements Serializable {
 						throw new CheatAttemptException("The commitments do not match the given values!");
 		}
 
+		/**
+		 * Evaluates given polynomial at given point in field Z_{modQ}.
+		 *
+		 * @param poly i^th elements contains coefficient of x^i of
+		 * polynomial.
+		 */
 		private static BigInteger evaluatePolynomial(BigInteger[] poly, int a_point) {
 				BigInteger point = BigInteger.valueOf(a_point);
 				BigInteger result = BigInteger.ZERO;
@@ -73,6 +89,10 @@ public class PedersonShare implements Serializable {
 				return result;
 		}
 
+		/**
+		 * Returns share of a value that is the sum of this share's value
+		 * and value of share given in the argument.
+		 */
 		public PedersonShare add(PedersonShare other) {
 				if (index.compareTo(other.index) != 0)
 						throw new RuntimeException("Can only add shares if they have the same index. Here we have " + index + ", " + other.index);
@@ -87,7 +107,11 @@ public class PedersonShare implements Serializable {
 						result.commitments[i] = result.commitments[i].multiply(other.commitments[i]);
 				return result;
 		}
-
+		
+		/**
+		 * Returns share of a value that is a constant (<code>c</code>)
+		 * times the value of this share.
+		 */
 		public PedersonShare constMultiply(BigInteger c) {
 				PedersonShare result = new PedersonShare(valData.multiply(c).mod(modQ),
 																								 valVerif.multiply(c).mod(modQ),
@@ -99,6 +123,10 @@ public class PedersonShare implements Serializable {
 				return result;
 		}
 
+		/**
+		 * Verifies that the public commitment stored in all these shares
+		 * is the same.
+		 */
 		static boolean verifyCommitmentEquality(PedersonShare[] shares) {
 				assert shares != null && shares.length > 0;
 				BigInteger[] commitments = shares[0].commitments;
@@ -111,7 +139,17 @@ public class PedersonShare implements Serializable {
 				}
 				return true;
 		}
-		
+
+		/**
+		 * Returns <code>numShares</code> shares of the number
+		 * <code>val</code> such that anybody with <code>threshold</code>
+		 * number of these shares can find <code>val</code>. Anybody with
+		 * fewer shares cannot find the value, even if they are
+		 * computationally unbounded.<p>
+		 *
+		 * <code>val</code> is assumed to be a number in Z_q (ie. an
+		 * integer between <code>0</code> and <code>PedersonShare.modQ</code>
+		 */
 		public static PedersonShare[] shareValue(BigInteger val, int threshold, int numShares) {
 				BigInteger[] polyData = new BigInteger[threshold];
 				BigInteger[] polyVerif = new BigInteger[threshold];
@@ -121,7 +159,6 @@ public class PedersonShare implements Serializable {
 						polyVerif[i] = BigIntegers.createRandomInRange(BigInteger.ZERO, modQ.subtract(BigInteger.ONE), random);
 				}
 				polyData[0] = val.mod(modQ);
-				System.out.println("Creation Tau: " + polyVerif[0]);
 
 				BigInteger[] commitments = new BigInteger[threshold];
 				for (int i = 0; i < threshold; ++i) {
@@ -139,8 +176,19 @@ public class PedersonShare implements Serializable {
 				}
 				return result;
 		}
-		
-		public static BigInteger combineShares(PedersonShare[] shares) {
+
+		/**
+		 * If there are enough number of the shares (as indicated by their
+		 * <code>threshold</code> property), returns the value they
+		 * represent.
+		 *
+		 * @throws CheatAttemptException If the MAC values on the shares
+		 * don't check out.
+		 * @throws RuntimeException If indufficient number of shares are
+		 * given or <code>threshold</code> value in all shares is not the
+		 * same.
+		 */
+		public static BigInteger combineShares(PedersonShare[] shares) throws CheatAttemptException {
 				// Run some checks
 				if (shares == null || shares.length == 0)
 						throw new RuntimeException("No shares given. Cannot reconstruct.");

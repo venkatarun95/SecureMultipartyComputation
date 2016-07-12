@@ -13,10 +13,24 @@ import edu.biu.scapi.primitives.hash.openSSL.OpenSSLSHA512;
 
 import pederson.PedersonShare;
 
+/**
+ * Interface class that encapsulates all protocols requiring
+ * communication in multi-party computation using Pederson secret
+ * sharing.
+ *
+ * Most functions take an argument <code>channels</code> which is a
+ * complete, ordered list of channels to which other peersre
+ * connected. The order of parties in this list must be the same for
+ * all peers/players. Exactly one of these must be <code>null</code>
+ * which corresponds to this party (other parties would have a channel
+ * connecting to this party in that position).
+ *
+ * When a cheat attempt is detected, currently this class throws a
+ * CheatAttemptException and halts protocol execution mid-way, even if
+ * the protocol can be completed without aid of other parties.
+ */
 public class PedersonComm {
 		// TODO(venkat):
-		//
-		// - Descrive notation of 'channels' parameter in the functions
 		//
 		// - Check that only one element of 'channels' is null
 		//   (corresponding to current player)
@@ -303,6 +317,12 @@ public class PedersonComm {
 				return PedersonShare.combineShares(shares);
 		}
 
+		/**
+		 * Multiply two shared values.<p>
+		 *
+		 * Requires interaction with 2 * threshold + 1 peers.
+		 */
+
 		public static PedersonShare multiply(PedersonShare val1, PedersonShare val2, Channel[] channels) throws IOException, CheatAttemptException {
 				PedersonMultiply prover = new PedersonMultiply();
 
@@ -338,12 +358,10 @@ public class PedersonComm {
 				for (int i = 0; i < channels.length; ++i)
 						if (channels[i] != null) {
 								zkpCommitments[i] = receive(channels[i]);
-								System.out.println(" >>>>>>>>>> " + i + " " + Arrays.toString(zkpCommitments[i]));
 						}
 
 				// Open coin toss
 				byte[] coinToss = coinTossDecommit(coinTossCommitments, channels);
-				System.out.println("Commitment length: " + coinToss.length + " " + PedersonShare.modQ.bitLength() + " " + channels.length);
 				BigInteger[] challenges = new BigInteger[channels.length];
 				for (int i = 0; i < channels.length; ++i) {
 						int bitLength = 1 + (PedersonShare.modQ.bitLength() - 1) / 8;
@@ -351,7 +369,6 @@ public class PedersonComm {
 																															i * bitLength,
 																															(i + 1) * bitLength)).
 								mod(PedersonShare.modQ);
-						System.out.println("Challenge: " + i + " " + challenges[i]);
 				}
 
 				// Broadcast our response
@@ -372,7 +389,6 @@ public class PedersonComm {
 				// Add shares to get share for result
 				PedersonShare result = shares[0].constMultiply(PedersonMultiply.getVandermondeInv(1, 1, channels.length));
 				for (int i = 1; i < shares.length; ++i) {
-						//assert shares[i].index.compareTo(BigInteger.valueOf(ourIndex)) == 0;
 						BigInteger lambda = PedersonMultiply.getVandermondeInv(i + 1, 1, channels.length);
 						result = result.add(shares[i].constMultiply(lambda));
 				}

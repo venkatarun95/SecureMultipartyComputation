@@ -21,7 +21,8 @@ enum State {
  * Class to keep track of state required during multiplication of two
  * Pedersen-shared values.<p>
  *
- * Helps PedersonComm in doing the multiplication.<p>
+ * Helps PedersonComm in doing the multiplication by handling most of
+ * the math.<p>
  *
  * For details about the algorithm refer to Appendix F in 'Gennaro,
  * Rosario, Michael O. Rabin, and Tal Rabin. "Simplified VSS and
@@ -73,6 +74,10 @@ public class PedersonMultiply {
 				return BigInteger.valueOf((long)Math.round(inverse.getValueAt(x-1, y-1)));
 		}
 
+		/**
+		 * Generates polynomial that this player must share with others to
+		 * multiply values of the shares <code>a</code> and <code>b</code>
+		 */
 		public PedersonShare[] sharedPoly(PedersonShare a, PedersonShare b, int a_numShares) {
 				assert state == State.NOT_STARTED;
 				assert a.index == b.index;
@@ -85,14 +90,11 @@ public class PedersonMultiply {
 				shares = PedersonShare.shareValue(a.valData.multiply(b.valData).mod(PedersonShare.modQ),
 																					a.threshold,
 																					numShares);
-				System.out.println("To share: " + PedersonShare.combineShares(shares) + " " + a.index + " " + a.valData + " "+ b.valData + " " + lambda);
 
 				alpha = a.valData;
 				rho = a.valVerif;
 				beta = b.valData;
 				sigma = b.valVerif;
-				//A = a.commitments[0];
-				//B = b.commitments[0];
 				aShare = a;
 				bShare = b;
 				threshold = a.threshold;
@@ -101,6 +103,13 @@ public class PedersonMultiply {
 				return shares;
 		}
 
+		/**
+		 * Produces random commitments that must be given to verifiers (if
+		 * this player is the proover).<p>
+		 *
+		 * To tolerate malicious verifiers, the verifies must have
+		 * commited to a random challenge.
+		 */
 		public BigInteger[] zkpProverStep1() {
 				assert state == State.POLY_SENT;
 				int numBits = PedersonShare.modQ.bitLength();
@@ -121,12 +130,17 @@ public class PedersonMultiply {
 						.modPow(x, PedersonShare.mod).
 						multiply(PedersonShare.genVerif.modPow(s2, PedersonShare.mod)).
 						mod(PedersonShare.mod);
-				System.out.println("B: " + bShare.index + " " + bShare.computeMac(bShare.index));
 
 				state = State.ZKP_STEP1_DONE;
 				return result;
 		}
 
+		/**
+		 * Given a random challenge <code>e</code> in
+		 * Z_{<code>PedersonShare.modQ</code>} produces a Zero Knowledge
+		 * Proof that the shared polynomial is correct according to
+		 * previous commitments.
+		 */
 		public BigInteger[] zkpProverStep2(BigInteger e) {
 				assert state == State.ZKP_STEP1_DONE;
 				BigInteger[] result = new BigInteger[5];
@@ -146,13 +160,6 @@ public class PedersonMultiply {
 						}
 						tau = tau.add(coeff.multiply(shares[i].valVerif)).mod(modQ);
 				}
-				//tau = shares[0].commitments[0]; //shares[aShare.index.intValue()-1].valVerif;
-				System.out.println("Prover Tau = " + tau + " C = " + shares[0].commitments[0] + " =  " +
-													 PedersonShare.genData.modPow(alpha.multiply(beta).mod(modQ), mod)
-													 .multiply(PedersonShare.genVerif.modPow(tau, mod)).mod(mod)
-													 + " " + aShare.index);
-				System.out.println("Prover B = " + bShare.computeMac(bShare.index) + " = "
-													 + PedersonShare.genData.modPow(beta, mod).multiply(PedersonShare.genVerif.modPow(sigma, mod)).mod(mod));
 
 				result[0] = d. add(e.multiply(beta)). mod(modQ);
 				result[1] = s. add(e.multiply(sigma)).mod(modQ);
@@ -162,15 +169,25 @@ public class PedersonMultiply {
 																									 .mod(modQ))
 																			).mod(modQ)).mod(modQ);
 
-				System.out.println("Prover knowledge: C = " + shares[0].commitments[0] + " Rewrite = " +
-													 bShare.computeMac(bShare.index).modPow(alpha, mod).
-													 multiply(PedersonShare.genVerif.modPow(tau.subtract(sigma.multiply(alpha)
-																																							 .mod(modQ)).mod(modQ), mod)).mod(mod));
-				
 				state = State.ZKP_STEP2_DONE;
 				return result;
 		}
 
+		/**
+		 * Verifies that the zero knowledge proof given by prover is correct.
+		 *
+		 * @param otherIndex Index of prover (according to value stored in
+		 * PedersonShare that is given to them).
+		 * @param share Share given by prover (whose validity is being
+		 * proven) to this player.
+		 * @param commitments Commitments given by prover possibly
+		 * produced using zkpProverStep1 @see
+		 * pederson.PedersonMultiply.zkpProverStep1
+		 * @param challenge Random challenge number given to prover
+		 * @param response Response produced by prover to random challenge
+		 * possubly using zkpProverStep2 @see
+		 * pederson.PedersonMultiply.zkpProverStep2
+		 */
 		public boolean verifyProof(int otherIndex, PedersonShare share, BigInteger[] commitments, BigInteger challenge, BigInteger[] response) {
 				BigInteger A = aShare.computeMac(BigInteger.valueOf(otherIndex));
 				BigInteger B = bShare.computeMac(BigInteger.valueOf(otherIndex));
@@ -181,30 +198,20 @@ public class PedersonMultiply {
 				BigInteger check1Lhs = genData.modPow(response[0], mod).
 						multiply(genVerif.modPow(response[1], mod)).mod(mod);
 				BigInteger check1Rhs = commitments[0].multiply(B.modPow(challenge, mod)).mod(mod);
-				if (check1Lhs.compareTo(check1Rhs) != 0) {
-						System.out.println("CHECK 1 FAILED!!");
+				if (check1Lhs.compareTo(check1Rhs) != 0)
 						return false;
-				}
-				System.out.println("Check 1 passed");
 
 				BigInteger check2Lhs = genData.modPow(response[2], mod).
 						multiply(genVerif.modPow(response[3], mod)).mod(mod);
 				BigInteger check2Rhs = commitments[1].multiply(A.modPow(challenge, mod)).mod(mod);
-				if (check2Lhs.compareTo(check2Rhs) != 0) {
-						System.out.println("CHECK 2 FAILED");
+				if (check2Lhs.compareTo(check2Rhs) != 0)
 						return false;
-				}
-				System.out.println("Check 2 passed");
 
-				System.out.println("Verifier C: " + otherIndex + " " + C);
 				BigInteger check3Lhs = (B.modPow(response[2], mod).
 																multiply(genVerif.modPow(response[4], mod))).mod(mod);
 				BigInteger check3Rhs = (commitments[2].multiply(C.modPow(challenge, mod))).mod(mod);
-				System.out.println("Check 3: " + otherIndex + " " + check3Lhs + " " + check3Rhs);
 				if (check3Lhs.compareTo(check3Rhs) != 0)
 						return false;
-				System.out.println("Check 3 passed");
-				System.out.println("ZKP Proof Accepted!!");
 				return true;
 		}
 }
