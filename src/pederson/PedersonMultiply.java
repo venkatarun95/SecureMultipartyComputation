@@ -36,9 +36,9 @@ public class PedersonMultiply {
 		private SecureRandom random;
 
 		private BigInteger d, s, x, s1, s2;
-		private BigInteger alpha, rho, beta, sigma, tau;
-		private BigInteger A, B;
-		//private PedersonShare aShare, bShare;
+		private BigInteger alpha, rho, beta, sigma;
+		//private BigInteger A, B;
+		private PedersonShare aShare, bShare;
 
 		/**
 		 * Cached inverses of Van der Monde matrices
@@ -50,23 +50,6 @@ public class PedersonMultiply {
 				random = new SecureRandom();
 		}
 
-		/**
-		 * For use by getVandermondeInv
-		 */
-		private static BigInteger combinationProduct(BigInteger[] nos, int n, int len, int startPosition){
-        if (len == 0)
-            return BigInteger.ONE;
-				BigInteger sum = BigInteger.ZERO;
-        for (int i = startPosition; i < n-len; i++) {
-            sum = sum.add(nos[i].
-													multiply(combinationProduct(nos, n, len-1, i+1)));
-        }
-				System.out.print("combPStatus: [");
-				for (BigInteger no : nos) System.out.print(no + " ");
-				System.out.print("] " + n + " " + len + " " + startPosition + " = " + sum);
-				return sum;
-    }
-				
 		/**
 		 * Returns (y, x)^th cell of the first row of the Van der Monde
 		 * matrix.<p>
@@ -88,38 +71,6 @@ public class PedersonMultiply {
 						vandermondeInv.put(n, inverse);
 				}
 				return BigInteger.valueOf((long)Math.round(inverse.getValueAt(x-1, y-1)));
-
-				// BigInteger[] nos = new BigInteger[n - 1];
-				// int curNo = 1;
-				// for (int i = 0; i < n - 1; ++i) {
-				// 		if (curNo == y)
-				// 				++curNo;
-				// 		nos[i] = BigInteger.valueOf(curNo);
-				// 		System.out.print(curNo + ":" + y + " ");
-				// 		++curNo;
-				// }
-				// System.out.println(" <- nos");
-				// BigInteger numerator = combinationProduct(nos, n, n - x, 0);
-				// if (x % 2 == 0)
-				// 		numerator = PedersonShare.modQ.subtract(numerator);
-
-				// BigInteger numerator = BigInteger.ONE;
-				// int curNo = 1;
-				// for (int i = 0; i < n - 1; ++i) {
-				// 		if (curNo == y)
-				// 				++curNo;
-				// 		numerator = numerator.multiply(BigInteger.valueOf(curNo));
-				// 		++curNo;
-				// }
-				
-				// BigInteger denominator = BigInteger.valueOf(y);
-				// System.out.println("combP: " + y + " " + numerator);
-				// for (int i = 1; i <= n; ++i) {
-				// 		if (i == y)
-				// 				continue;
-				// 		denominator = denominator.multiply(BigInteger.valueOf(i - y));
-				// }
-				// return numerator.multiply(denominator.modInverse(PedersonShare.modQ)).mod(PedersonShare.modQ);
 		}
 
 		public PedersonShare[] sharedPoly(PedersonShare a, PedersonShare b, int a_numShares) {
@@ -131,7 +82,7 @@ public class PedersonMultiply {
 						throw new RuntimeException("The thresholds for the two values to be multiplied are not the same.");
 				BigInteger lambda = getVandermondeInv((int)a.index.longValue(), 1, numShares);
 
-				shares = PedersonShare.shareValue((a.valData.multiply(b.valData).mod(PedersonShare.modQ)).multiply(lambda).mod(PedersonShare.modQ),
+				shares = PedersonShare.shareValue(a.valData.multiply(b.valData).mod(PedersonShare.modQ),
 																					a.threshold,
 																					numShares);
 				System.out.println("To share: " + PedersonShare.combineShares(shares) + " " + a.index + " " + a.valData + " "+ b.valData + " " + lambda);
@@ -140,8 +91,11 @@ public class PedersonMultiply {
 				rho = a.valVerif;
 				beta = b.valData;
 				sigma = b.valVerif;
-				A = a.commitments[0];
-				B = b.commitments[0];
+				//A = a.commitments[0];
+				//B = b.commitments[0];
+				aShare = a;
+				bShare = b;
+				threshold = a.threshold;
 				
 				state = State.POLY_SENT;
 				return shares;
@@ -163,9 +117,11 @@ public class PedersonMultiply {
 				result[1] = PedersonShare.genData.modPow(x, PedersonShare.mod).
 						multiply(PedersonShare.genVerif.modPow(s1, PedersonShare.mod)).
 						mod(PedersonShare.mod);
-				result[2] = B.modPow(x, PedersonShare.mod).
+				result[2] = bShare.computeMac(bShare.index)
+						.modPow(x, PedersonShare.mod).
 						multiply(PedersonShare.genVerif.modPow(s2, PedersonShare.mod)).
 						mod(PedersonShare.mod);
+				System.out.println("B: " + bShare.index + " " + bShare.computeMac(bShare.index));
 
 				state = State.ZKP_STEP1_DONE;
 				return result;
@@ -177,7 +133,8 @@ public class PedersonMultiply {
 
 				// Reconstruct tau. We could have taken it while constructing
 				// the shares, but this is more modular.
-				BigInteger tau = BigInteger.ZERO, modQ = PedersonShare.modQ;
+				BigInteger tau = BigInteger.ZERO;
+				BigInteger mod = PedersonShare.mod, modQ = PedersonShare.modQ;
 				for (int i = 0; i < threshold; ++i) {
 						BigInteger coeff = BigInteger.ONE;
 						for (int j = 0; j < threshold; ++j) {
@@ -189,45 +146,65 @@ public class PedersonMultiply {
 						}
 						tau = tau.add(coeff.multiply(shares[i].valVerif)).mod(modQ);
 				}
-						
-				result[0] = d. add(e.multiply(beta)). mod(PedersonShare.modQ);
-				result[1] = s. add(e.multiply(sigma)).mod(PedersonShare.modQ);
-				result[2] = x. add(e.multiply(alpha)).mod(PedersonShare.modQ);
-				result[3] = s1.add(e.multiply(rho)).  mod(PedersonShare.modQ);				
-				result[4] = s2.add(e.multiply(tau)).  mod(PedersonShare.modQ);
+				//tau = shares[0].commitments[0]; //shares[aShare.index.intValue()-1].valVerif;
+				System.out.println("Prover Tau = " + tau + " C = " + shares[0].commitments[0] + " =  " +
+													 PedersonShare.genData.modPow(alpha.multiply(beta).mod(modQ), mod)
+													 .multiply(PedersonShare.genVerif.modPow(tau, mod)).mod(mod)
+													 + " " + aShare.index);
+				System.out.println("Prover B = " + bShare.computeMac(bShare.index) + " = "
+													 + PedersonShare.genData.modPow(beta, mod).multiply(PedersonShare.genVerif.modPow(sigma, mod)).mod(mod));
 
+				result[0] = d. add(e.multiply(beta)). mod(modQ);
+				result[1] = s. add(e.multiply(sigma)).mod(modQ);
+				result[2] = x. add(e.multiply(alpha)).mod(modQ);
+				result[3] = s1.add(e.multiply(rho)).  mod(modQ);				
+				result[4] = s2.add(e.multiply(tau.subtract(sigma.multiply(alpha)
+																									 .mod(modQ))
+																			).mod(modQ)).mod(modQ);
+
+				System.out.println("Prover knowledge: C = " + shares[0].commitments[0] + " Rewrite = " +
+													 bShare.computeMac(bShare.index).modPow(alpha, mod).
+													 multiply(PedersonShare.genVerif.modPow(tau.subtract(sigma.multiply(alpha)
+																																							 .mod(modQ)).mod(modQ), mod)).mod(mod));
+				
 				state = State.ZKP_STEP2_DONE;
 				return result;
 		}
 
-		public boolean verifyProof(PedersonShare share, BigInteger[] commitments, BigInteger challenge, BigInteger[] response) {
-				//BigInteger A = 
-				BigInteger C = share.computeMac();
+		public boolean verifyProof(int otherIndex, PedersonShare share, BigInteger[] commitments, BigInteger challenge, BigInteger[] response) {
+				BigInteger A = aShare.computeMac(BigInteger.valueOf(otherIndex));
+				BigInteger B = bShare.computeMac(BigInteger.valueOf(otherIndex));
+				BigInteger C = share.commitments[0];// share.computeMac(BigInteger.valueOf(otherIndex));
 				BigInteger mod = PedersonShare.mod;
 				BigInteger genData = PedersonShare.genData, genVerif = PedersonShare.genVerif;
 				
 				BigInteger check1Lhs = genData.modPow(response[0], mod).
 						multiply(genVerif.modPow(response[1], mod)).mod(mod);
 				BigInteger check1Rhs = commitments[0].multiply(B.modPow(challenge, mod)).mod(mod);
-				System.out.println("Check1 " + check1Lhs + " " + check1Rhs);
-				if (check1Lhs.compareTo(check1Rhs) != 0)
+				if (check1Lhs.compareTo(check1Rhs) != 0) {
+						System.out.println("CHECK 1 FAILED!!");
 						return false;
+				}
 				System.out.println("Check 1 passed");
 
 				BigInteger check2Lhs = genData.modPow(response[2], mod).
 						multiply(genVerif.modPow(response[3], mod)).mod(mod);
-				BigInteger check2Rhs = commitments[1].multiply(A.modPow(challenge, mod));
-				if (check2Lhs.compareTo(check2Rhs) != 0)
+				BigInteger check2Rhs = commitments[1].multiply(A.modPow(challenge, mod)).mod(mod);
+				if (check2Lhs.compareTo(check2Rhs) != 0) {
+						System.out.println("CHECK 2 FAILED");
 						return false;
+				}
 				System.out.println("Check 2 passed");
 
-				BigInteger check3Lhs = B.modPow(response[2], mod).
-						multiply(genVerif.modPow(response[4], mod)).mod(mod);
-				BigInteger check3Rhs = commitments[2].multiply(C.modPow(challenge, mod));
+				System.out.println("Verifier C: " + otherIndex + " " + C);
+				BigInteger check3Lhs = (B.modPow(response[2], mod).
+																multiply(genVerif.modPow(response[4], mod))).mod(mod);
+				BigInteger check3Rhs = (commitments[2].multiply(C.modPow(challenge, mod))).mod(mod);
+				System.out.println("Check 3: " + otherIndex + " " + check3Lhs + " " + check3Rhs);
 				if (check3Lhs.compareTo(check3Rhs) != 0)
 						return false;
 				System.out.println("Check 3 passed");
-				
+				System.out.println("ZKP Proof Accepted!!");
 				return true;
 		}
 }

@@ -328,15 +328,18 @@ public class PedersonComm {
 				byte[][] coinTossCommitments = coinTossCommit(PedersonShare.modQ.bitLength() * channels.length, channels);
 
 				// Broadcast commitment to ZKP
+				BigInteger[] ourZkpCommitment = prover.zkpProverStep1();
 				for (Channel channel : channels)
 						if (channel != null)
-								channel.send(prover.zkpProverStep1());
+								channel.send(ourZkpCommitment);
 
 				// Receive commitments to ZKP from others
 				BigInteger[][] zkpCommitments = new BigInteger[channels.length][];
 				for (int i = 0; i < channels.length; ++i)
-						if (channels[i] != null)
+						if (channels[i] != null) {
 								zkpCommitments[i] = receive(channels[i]);
+								System.out.println(" >>>>>>>>>> " + i + " " + Arrays.toString(zkpCommitments[i]));
+						}
 
 				// Open coin toss
 				byte[] coinToss = coinTossDecommit(coinTossCommitments, channels);
@@ -352,25 +355,26 @@ public class PedersonComm {
 				}
 
 				// Broadcast our response
+				BigInteger[] zkpResponse = prover.zkpProverStep2(challenges[ourIndex]);
 				for (Channel channel : channels)
 						if (channel != null)
-								channel.send(prover.zkpProverStep2(challenges[ourIndex]));
+								channel.send(zkpResponse);
 
 				// Get other's responses and verify them
 				for (int i = 0; i < challenges.length; ++i) {
 						if (channels[i] != null) {
 								BigInteger[] response = receive(channels[i]);
-								if (!prover.verifyProof(shares[i], zkpCommitments[i], challenges[i], response))
-										System.out.println("ZKP Failed!"); //throw new CheatAttemptException("Zero Knowoledge Proof failed for player " + i);
+								if (!prover.verifyProof(i + 1, shares[i], zkpCommitments[i], challenges[i], response))
+										throw new CheatAttemptException("Zero Knowoledge Proof failed for player " + i);
 						}
 				}
 
 				// Add shares to get share for result
-				PedersonShare result = shares[0]; //.constMultiply(PedersonMultiply.getVandermondeInv(1, channels.length));
+				PedersonShare result = shares[0].constMultiply(PedersonMultiply.getVandermondeInv(1, 1, channels.length));
 				for (int i = 1; i < shares.length; ++i) {
 						//assert shares[i].index.compareTo(BigInteger.valueOf(ourIndex)) == 0;
-						//BigInteger lambda = PedersonMultiply.getVandermondeInv(i + 1, channels.length);
-						result = result.add(shares[i]);
+						BigInteger lambda = PedersonMultiply.getVandermondeInv(i + 1, 1, channels.length);
+						result = result.add(shares[i].constMultiply(lambda));
 				}
 				return result;
 		}

@@ -45,20 +45,20 @@ public class PedersonShare implements Serializable {
 				threshold = a_threshold;
 		}
 
-		BigInteger computeMac() {
+		BigInteger computeMac(BigInteger indexAt) {
 				BigInteger mac = BigInteger.ONE;
 				BigInteger exp = BigInteger.ONE;
 				for (int i = 0; i < commitments.length; ++i) {
 						mac = mac.multiply(commitments[i].modPow(exp, mod)).mod(mod);
-						exp = exp.multiply(index);
+						exp = exp.multiply(indexAt);
 				}
 				return mac;
 		}
 		
-		private void validate() throws CheatAttemptException {				
+		void validate() throws CheatAttemptException {				
 				BigInteger rhs = genData.modPow(valData, mod);
 				rhs = rhs.multiply(genVerif.modPow(valVerif, mod)).mod(mod);
-				if (computeMac().compareTo(rhs) != 0)
+				if (computeMac(index).compareTo(rhs) != 0)
 						throw new CheatAttemptException("The commitments do not match the given values!");
 		}
 
@@ -120,7 +120,8 @@ public class PedersonShare implements Serializable {
 						polyData[i] = BigIntegers.createRandomInRange(BigInteger.ZERO, modQ.subtract(BigInteger.ONE), random);
 						polyVerif[i] = BigIntegers.createRandomInRange(BigInteger.ZERO, modQ.subtract(BigInteger.ONE), random);
 				}
-				polyData[0] = val;
+				polyData[0] = val.mod(modQ);
+				System.out.println("Creation Tau: " + polyVerif[0]);
 
 				BigInteger[] commitments = new BigInteger[threshold];
 				for (int i = 0; i < threshold; ++i) {
