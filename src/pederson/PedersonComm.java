@@ -92,7 +92,8 @@ public class PedersonComm {
 		 * Toss <code>numbits</code> shared coins among all parties.<p>
 		 * 
 		 * No party can control what the result is. The toss is random as
-		 * long as at-least one party is honest.
+		 * long as at-least one party is honest. This is the commitment
+		 * phase of the coin toss.
 		 *
 		 * TODO(venkat): If somebody gives different commitment/random
 		 * strings to different people, current implementation detects it
@@ -100,8 +101,12 @@ public class PedersonComm {
 		 *
 		 * @param numBits Number of bits worth of coins to toss (in
 		 * parallel)
+		 * @return Everybody's commitments. To be passed to {@link
+		 * #coinTossDecommit(byte[][] commitments, Channel[]
+		 * channels)}. Contains this players random bits instead of
+		 * commitment
 		 */
-		private static byte[] coinToss(int numBits, Channel[] channels) throws IOException {
+		private static byte[][] coinTossCommit(int numBits, Channel[] channels) throws IOException {
 				// Choose our random bits and hash them
 				byte[] myRandBits = new byte[1 + (numBits - 1) / 8];
 				random.nextBytes(myRandBits);
@@ -117,10 +122,50 @@ public class PedersonComm {
 
 				// Get other's commitments
 				byte[][] commitments = new byte[channels.length][];
-				for (int i = 0; i < channels.length; ++i)
-						if (channels[i] != null)
+				for (int i = 0; i < channels.length; ++i) {
+						if (channels[i] != null) {
 								commitments[i] = receive(channels[i]);
+								if (commitments[i].length != myCommitment.length)
+										throw new IOException("Commitment of unexpected length received");
+						}
+						else
+								commitments[i] = myRandBits;
+				}
+				return commitments;
+		}
 
+		/**
+		 * Toss shared coins among all parties.<p>
+		 * 
+		 * No party can control what the result is. The toss is random as
+		 * long as at-least one party is honest. This is the de-commitment
+		 * phase of the coin toss.
+		 *
+		 * TODO(venkat): If somebody gives different commitment/random
+		 * strings to different people, current implementation detects it
+		 * but does not specify who cheated.
+		 *
+		 * TODO(venkat): Make sure that a party cannot make their
+		 * commitment depend on other's commitments
+		 *
+		 * @param commitments output of {@link #coinTossCommit(int
+		 * numBits, Channel[] channels)}.
+		 * @param channels <code>null</code> should be in the same place
+		 * as in call to commit phase. This is NOT checked in this
+		 * function.
+		 * @return Result of coin toss.
+		 */
+		private static byte[] coinTossDecommit(byte[][] commitments, Channel[] channels) throws IOException {
+				// Find <code>myRandBits</code>
+				byte[] myRandBits = null;
+				for (int i = 0; i < channels.length; ++i) {
+						if (channels[i] == null) {
+								assert myRandBits == null;
+								myRandBits = commitments[i];
+						}
+				}
+				assert myRandBits != null;
+	
 				// Broadcast actual bits
 				for (Channel channel : channels)
 						if (channel != null)
@@ -133,10 +178,12 @@ public class PedersonComm {
 						if (channels[i] == null)
 								continue;
 						byte[] randBits = receive(channels[i]);
+						if (randBits.length != myRandBits.length)
+								throw new IOException("Random bits of unexpected length received.");
 						
-						commitHash = new OpenSSLSHA512();
+						OpenSSLSHA512 commitHash = new OpenSSLSHA512();
 						commitHash.update(randBits, 0, myRandBits.length);
-						byte[] expectedCommitment = new byte[myRandBits.length];
+						byte[] expectedCommitment = new byte[commitHash.getHashedMsgSize()];
 						commitHash.hashFinal(expectedCommitment, 0);
 						if (!Arrays.equals(expectedCommitment, commitments[i]))
 								throw new CheatAttemptException("Decommitment does not match commitment while coin tossing.");
@@ -200,7 +247,7 @@ public class PedersonComm {
 		 * @params channels Channels with which other players are
 		 * connected. Assumes that array index is a proxy for player id.
 		 */
-		public static PedersonShare shareReceiver(int recvFrom, Channel[] channels) throws IOException {
+		public static PedersonShare shareReceiver(int recvFrom, Channel[] channels) throws IOException, CheatAttemptException {
 				assert channels[recvFrom] != null;
 				PedersonShare share;
 				try {
@@ -210,6 +257,7 @@ public class PedersonComm {
 						throw new IOException(e.getMessage());
 				}
 
+				share.validate();
 				verifyCommitmentEquality(share.commitments, channels);
 				return share;
 		}
@@ -217,7 +265,7 @@ public class PedersonComm {
 		/**
 		 * Combine shares with other players.<p>
 		 *
-		 * Tries to find threshold number of cooperating players.
+		 * Tries to find threshold number of cooperating players.<p>
 		 *
 		 * @params share Share of this player.
 		 * @params channels Channels with which other players are
@@ -255,7 +303,75 @@ public class PedersonComm {
 				return PedersonShare.combineShares(shares);
 		}
 
-		public static PedersonShare multiply(PedersonShare val1, PedersonShare val2, Channel[] channels) {
-				return null;
+		public static PedersonShare multiply(PedersonShare val1, PedersonShare val2, Channel[] channels) throws IOException, CheatAttemptException {
+				PedersonMultiply prover = new PedersonMultiply();
+
+				// Share polynomial and get shares from others.
+				
+				// TODO(venkat): This can be done in parallel instead of
+				// party-by-party.
+				PedersonShare[] myPoly = prover.sharedPoly(val1, val2, channels.length);
+				PedersonShare[] shares = new PedersonShare[channels.length];
+				int ourIndex = -1;
+				for (int i = 0; i < channels.length; ++i) {
+						if (channels[i] == null) {
+								shareSender(myPoly, channels);
+								// Our share of our polynomial.
+								shares[i] = myPoly[i];
+								ourIndex = i;
+						}
+						else
+								shares[i] = shareReceiver(i, channels);
+				}
+				
+				// Commit to coin toss
+				byte[][] coinTossCommitments = coinTossCommit(PedersonShare.modQ.bitLength() * channels.length, channels);
+
+				// Broadcast commitment to ZKP
+				for (Channel channel : channels)
+						if (channel != null)
+								channel.send(prover.zkpProverStep1());
+
+				// Receive commitments to ZKP from others
+				BigInteger[][] zkpCommitments = new BigInteger[channels.length][];
+				for (int i = 0; i < channels.length; ++i)
+						if (channels[i] != null)
+								zkpCommitments[i] = receive(channels[i]);
+
+				// Open coin toss
+				byte[] coinToss = coinTossDecommit(coinTossCommitments, channels);
+				System.out.println("Commitment length: " + coinToss.length + " " + PedersonShare.modQ.bitLength() + " " + channels.length);
+				BigInteger[] challenges = new BigInteger[channels.length];
+				for (int i = 0; i < channels.length; ++i) {
+						int bitLength = 1 + (PedersonShare.modQ.bitLength() - 1) / 8;
+						challenges[i] = new BigInteger(Arrays.copyOfRange(coinToss,
+																															i * bitLength,
+																															(i + 1) * bitLength)).
+								mod(PedersonShare.modQ);
+						System.out.println("Challenge: " + i + " " + challenges[i]);
+				}
+
+				// Broadcast our response
+				for (Channel channel : channels)
+						if (channel != null)
+								channel.send(prover.zkpProverStep2(challenges[ourIndex]));
+
+				// Get other's responses and verify them
+				for (int i = 0; i < challenges.length; ++i) {
+						if (channels[i] != null) {
+								BigInteger[] response = receive(channels[i]);
+								if (!prover.verifyProof(shares[i], zkpCommitments[i], challenges[i], response))
+										System.out.println("ZKP Failed!"); //throw new CheatAttemptException("Zero Knowoledge Proof failed for player " + i);
+						}
+				}
+
+				// Add shares to get share for result
+				PedersonShare result = shares[0]; //.constMultiply(PedersonMultiply.getVandermondeInv(1, channels.length));
+				for (int i = 1; i < shares.length; ++i) {
+						//assert shares[i].index.compareTo(BigInteger.valueOf(ourIndex)) == 0;
+						//BigInteger lambda = PedersonMultiply.getVandermondeInv(i + 1, channels.length);
+						result = result.add(shares[i]);
+				}
+				return result;
 		}
 }
