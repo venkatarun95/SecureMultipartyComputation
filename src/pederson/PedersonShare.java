@@ -177,6 +177,41 @@ public class PedersonShare implements Serializable {
 				return result;
 		}
 
+    /**
+		 * Returns <code>numShares</code> shares of a public constant
+		 * <code>val</code> threshold <code>threshold</code>. All shares
+		 * are known to everybody.
+		 *
+		 * <code>val</code> is assumed to be a number in Z_q (ie. an
+		 * integer between <code>0</code> and <code>PedersonShare.modQ</code>
+		 */
+		public static PedersonShare[] shareConstValue(BigInteger val, int threshold, int numShares) {
+				BigInteger[] polyData = new BigInteger[threshold];
+				BigInteger[] polyVerif = new BigInteger[threshold];
+				SecureRandom random = new SecureRandom();
+				for (int i = 0; i < threshold; ++i) {
+						polyData[i] = BigInteger.valueOf(i);
+						polyVerif[i] = BigInteger.valueOf(i);
+				}
+				polyData[0] = val.mod(modQ);
+
+				BigInteger[] commitments = new BigInteger[threshold];
+				for (int i = 0; i < threshold; ++i) {
+						commitments[i] = genData.modPow(polyData[i], mod).
+								multiply(genVerif.modPow(polyVerif[i], mod)).mod(mod);
+				}
+
+				PedersonShare[] result = new PedersonShare[numShares];
+				for (int i = 1; i < numShares + 1; ++i) {
+						result[i-1] = new PedersonShare(evaluatePolynomial(polyData, i),
+																						evaluatePolynomial(polyVerif, i),
+																						BigInteger.valueOf(i),
+																						commitments,
+																						threshold);
+				}
+				return result;
+		}
+
 		/**
 		 * If there are enough number of the shares (as indicated by their
 		 * <code>threshold</code> property), returns the value they
