@@ -322,7 +322,6 @@ public class PedersonComm {
 		 *
 		 * Requires interaction with 2 * threshold + 1 peers.
 		 */
-
 		public static PedersonShare multiply(PedersonShare val1, PedersonShare val2, Channel[] channels) throws IOException, CheatAttemptException {
 				PedersonMultiply prover = new PedersonMultiply();
 
@@ -394,4 +393,39 @@ public class PedersonComm {
 				}
 				return result;
 		}
+
+    /**
+     * Generate share of a random number that no party knows about as
+     * long as one of them is honest. The random number is uniformly
+     * distributed in 0 to modQ - 1.
+     *
+     * @param threshold The reveal threshold of the shares generated.
+     */
+    public static PedersonShare shareRandomNumber(int threshold, Channel[] channels) throws IOException, CheatAttemptException {
+        // Generate a shares of a random number
+        BigInteger rNum = new BigInteger(PedersonShare.modQ.bitLength(), random).mod(PedersonShare.modQ);
+        PedersonShare[] shares = PedersonShare.shareValue(rNum, threshold, channels.length);
+
+        // Send the shares and receive shares from others.
+
+        // TODO: This can be done in parallel instead of one-by-one
+        PedersonShare result = null;
+        for (int i = 0; i < channels.length; ++i) {
+            if (channels[i] == null) {
+                shareSender(shares, channels);
+                if (result == null)
+                    result = shares[i];
+                result = result.add(shares[i]);
+            }
+            else {
+                PedersonShare received = shareReceiver(i, channels);
+                if (result == null)
+                    result = received;
+                result = result.add(received);
+            }
+        }
+
+        return result;
+        
+    }
 }
