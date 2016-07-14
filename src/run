@@ -1,7 +1,7 @@
 #!/bin/bash
 
-scapi main socketParties0.properties &
-scapi main socketParties1.properties &
-scapi main socketParties2.properties &
-scapi main socketParties3.properties &
-scapi main socketParties4.properties &
+scapi pederson.Test socketParties0.properties &
+scapi pederson.Test socketParties1.properties &
+scapi pederson.Test socketParties2.properties &
+scapi pederson.Test socketParties3.properties &
+scapi pederson.Test socketParties4.properties &

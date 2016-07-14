@@ -1,3 +1,5 @@
+package pederson;
+
 import java.math.BigInteger;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -17,8 +19,9 @@ import edu.biu.scapi.exceptions.DuplicatePartyException;
 
 import pederson.PedersonComm;
 import pederson.PedersonShare;
+import pederson.ClearTextProxy;
 
-public class main {
+public class Test {
 		public static void main(String[] args) throws IOException{
 				if (args.length != 1) {
 						System.err.println("Argument: <player.properties>");
@@ -47,6 +50,7 @@ public class main {
 
 				// Create channels array
 				SocketPartyData thisParty = parties[0];
+				int thisPartyId = -1;
 				Arrays.sort(parties, new Comparator<SocketPartyData>() {
 								@Override
 								public int compare(SocketPartyData o1, SocketPartyData o2) {
@@ -57,6 +61,7 @@ public class main {
 				for (int i = 0; i < parties.length; ++i) {
 						if (parties[i] == thisParty) {
 								channels[i] = null;
+								thisPartyId = i;
 								continue;
 						}
 						channels[i] = connections.get(parties[i]).values().iterator().next();
@@ -98,11 +103,33 @@ public class main {
         // Share a random value and open it
         PedersonShare randValShare = PedersonComm.shareRandomNumber(2, channels);
         BigInteger randVal = PedersonComm.combineShares(randValShare, channels);
-        System.out.println("Random Value: " + randVal + " : ");
 
+				// Check plaintext exponentiation
         BigInteger exponentiated = PedersonComm.plaintextExponentiate(BigInteger.valueOf(4), randValShare, channels);
-        System.out.println("4^{random value} = " + exponentiated);
         if (exponentiated.compareTo(BigInteger.valueOf(4).modPow(randVal, PedersonShare.mod)) != 0)
             throw new RuntimeException("Error in exponentiation. Result did not match what was expected.");
+
+				// Test clear-text proxy generation.
+				int ctpSecret = 10, ctpNumBits = 64;
+				ClearTextProxy ctpGen = new ClearTextProxy(ctpNumBits, 2, channels);
+				PedersonShare[] bitShared = new PedersonShare[ctpNumBits];
+				for (int i = 0; i < ctpNumBits; ++i)
+						bitShared[i] = PedersonShare.shareConstValue(BigInteger.valueOf(((ctpSecret & (1 << i)) > 0)?1:0),
+																											2, 5)[thisPartyId];
+				BigInteger ctpResult = ctpGen.generateCtp(bitShared, channels);
+
+				// Compute what clear-text proxy should be
+				BigInteger expectedCtp = PedersonComm.combineShares(ctpGen.randomKey[0], channels);
+				for (int i = 0; i < ctpNumBits; ++i) {
+						BigInteger randomKey = PedersonComm.combineShares(ctpGen.randomKey[i + 1], channels);
+						if ((ctpSecret & (1 << i)) != 0)
+								expectedCtp = expectedCtp.multiply(randomKey).mod(PedersonShare.modQ);
+				}
+				expectedCtp = PedersonShare.genVerif.modPow(expectedCtp, PedersonShare.mod);
+				
+				if (expectedCtp.compareTo(ctpResult) != 0)
+						throw new RuntimeException("Generated clear-text proxy is not what was expected");
+
+				System.out.println("Tests Finished Successfully!");
 		}
 }
