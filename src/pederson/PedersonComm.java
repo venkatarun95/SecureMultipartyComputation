@@ -530,4 +530,23 @@ public class PedersonComm {
             throw new CheatAttemptException("Reconstructed result did not pass verification.");
         return result;
     }
+
+		/**
+		 * Compute shares of generator ^ {exponent}.
+		 */
+		public static PedersonShare exponentiate(PedersonShare generator, BigInteger exponent, Channel[] channels) throws IOException {
+				PedersonShare result = null;
+				// Equals generator^{2^i} in the loop
+				PedersonShare curExponent = generator;
+				for (int i = 0; i < exponent.bitLength(); ++i) {
+						if (exponent.testBit(i)) {
+								if (result == null)
+										result = curExponent;
+								else
+										result = PedersonComm.multiply(result, curExponent, channels);
+						}
+						curExponent = PedersonComm.multiply(curExponent, curExponent, channels);
+				}
+				return result;
+		}
 }

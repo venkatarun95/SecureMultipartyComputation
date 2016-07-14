@@ -6,6 +6,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.security.SecureRandom;
 
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
@@ -67,6 +68,7 @@ public class Test {
 						channels[i] = connections.get(parties[i]).values().iterator().next();
 				}
 
+				SecureRandom random = new SecureRandom();
 				// Test linear operations
 				// First player shares a number
 				PedersonShare val1, val2;
@@ -104,13 +106,22 @@ public class Test {
         PedersonShare randValShare = PedersonComm.shareRandomNumber(2, channels);
         BigInteger randVal = PedersonComm.combineShares(randValShare, channels);
 
-				// Check plaintext exponentiation
-        BigInteger exponentiated = PedersonComm.plaintextExponentiate(BigInteger.valueOf(4), randValShare, channels);
-        if (exponentiated.compareTo(BigInteger.valueOf(4).modPow(randVal, PedersonShare.mod)) != 0)
-            throw new RuntimeException("Error in exponentiation. Result did not match what was expected.");
+				// Test plaintext exponentiation
+        BigInteger ptExponentiated = PedersonComm.plaintextExponentiate(BigInteger.valueOf(4), randValShare, channels);
+        if (ptExponentiated.compareTo(BigInteger.valueOf(4).modPow(randVal, PedersonShare.mod)) != 0)
+            throw new RuntimeException("Error in plaintext exponentiation. Result did not match what was expected.");
+
+				// Test exponentiation
+				BigInteger exponent = new BigInteger("29743");
+				PedersonShare exponentiatedShare = PedersonComm.exponentiate(randValShare,
+																																			exponent,
+																																			channels);
+				BigInteger exponentiated = PedersonComm.combineShares(exponentiatedShare, channels);
+				if (exponentiated.compareTo(randVal.modPow(exponent, PedersonShare.modQ)) != 0)
+						throw new RuntimeException("Exponentiation test failed." );
 
 				// Test clear-text proxy generation.
-				int ctpSecret = 10, ctpNumBits = 64;
+				int ctpSecret = 10, ctpNumBits = 16;
 				ClearTextProxy ctpGen = new ClearTextProxy(ctpNumBits, 2, channels);
 				PedersonShare[] bitShared = new PedersonShare[ctpNumBits];
 				for (int i = 0; i < ctpNumBits; ++i)
