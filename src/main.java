@@ -85,13 +85,24 @@ public class main {
 				}
 
 				// Compute an operation and open share
-				PedersonShare res = val1.add(val2.constMultiply(new BigInteger("11")));
-
-				System.out.println(PedersonComm.combineShares(res, 2, channels));
+				PedersonShare resShare = val1.add(val2.constMultiply(new BigInteger("11")));
+        BigInteger res = PedersonComm.combineShares(resShare, channels);
+        if (res.intValue() != 241)
+            throw new RuntimeException("Error in linear operations. Test failed.");
 
 				// Now multiply two values and open share
-				PedersonShare mult = PedersonComm.multiply(val1, res, channels);
+				PedersonShare mult = PedersonComm.multiply(val1, resShare, channels);
+				if (PedersonComm.combineShares(mult, channels).intValue() != 2410)
+            throw new RuntimeException("Error in multiplication. Test Failed.");
 				
-				System.out.println("Product: " + PedersonComm.combineShares(mult, 2, channels) + " : ");
+        // Share a random value and open it
+        PedersonShare randValShare = PedersonComm.shareRandomNumber(2, channels);
+        BigInteger randVal = PedersonComm.combineShares(randValShare, channels);
+        System.out.println("Random Value: " + randVal + " : ");
+
+        BigInteger exponentiated = PedersonComm.plaintextExponentiate(BigInteger.valueOf(4), randValShare, channels);
+        System.out.println("4^{random value} = " + exponentiated);
+        if (exponentiated.compareTo(BigInteger.valueOf(4).modPow(randVal, PedersonShare.mod)) != 0)
+            throw new RuntimeException("Error in exponentiation. Result did not match what was expected.");
 		}
 }
