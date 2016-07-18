@@ -34,7 +34,7 @@ public class SchnorrSignature {
 		 * signer or contents of the message. This is a computational
 		 * guarantee.
 		 */
-		public static SchnorrSignatureShare[] sign(BigInteger message, BigInteger privateKey, int threshold, int numShares) {
+		public static SchnorrSignatureShare[] sign(BigInteger message, BigInteger privateKey, bool publicKeyHidden, int threshold, int numShares) {
 				SecureRandom random = new SecureRandom();
 				BigInteger modQ = PedersonShare.modQ;
 				// TODO: Verify!! modQ also probably needs to be a safe prime now.
@@ -54,18 +54,33 @@ public class SchnorrSignature {
 				BigInteger e = new BigInteger(hashBytes).mod(modQ);
 				BigInteger s = k.subtract(privateKey.multiply(e)).mod(modQMinusOne);
 
-				// System.out.println("message: " + message + "\nprivateKey: " + privateKey + "\npublicKey: " + generator.modPow(privateKey, modQ) + "\nk = " + k + "\nr = " + r + "\ne = " + e + "\ns: " + s);
+				System.out.println("message: " + message + "\nprivateKey: " + privateKey + "\npublicKey: " + generator.modPow(privateKey, modQ) + "\nk = " + k + "\nr = " + r + "\ne = " + e + "\ns: " + s);
 				
 				// Make the shares
 				PedersonShare[] publicKeyShares = PedersonShare.shareValue(generator.modPow(privateKey, modQ), threshold, numShares);
 				PedersonShare[] messageShares = PedersonShare.shareValue(message, threshold, numShares);
+				PedersonShare[][] sShares = new PedersonShare[modQ.bitLength()][];
+				BigInteger gPow = generator;
+				for (int i = 0; i < modQ.bitLength(); ++i) {
+						sShares[i] = PedersonShare.shareValue(s.testBit(i)?BigInteger.ONE:gPow.modInverse(modQ),
+																									threshold,
+																									numShares);
+						gPow = gPow.multiply(gPow).mod(modQ);
+				}
 				SchnorrSignatureShare[] result = new SchnorrSignatureShare[numShares];
+
+				// Package information
 				for (int i = 0; i < numShares; ++i) {
 						result[i] = new SchnorrSignatureShare();
-						result[i].publicKey = publicKeyShares[i];
+						if (publicKeyHidden)
+								result[i].publicKey = publicKeyShares[i];
+						else
+								result[i].publicKey = publickey;
 						result[i].message = messageShares[i];
 						result[i].e = e;
-						result[i].s = s;
+						result[i].s = new PedersonShare[modQ.bitLength()];
+						for (int j = 0; j < modQ.bitLength(); ++j)
+								result[i].s[j] = sShares[j][i];
 				}
 
 				return result;
@@ -77,11 +92,34 @@ public class SchnorrSignature {
 		 */
 		public static boolean verify(SchnorrSignatureShare sign, Channel[] channels) throws IOException, CheatAttemptException {
 				// Notation: variable name x_y denotes x^y
-				BigInteger modQ = PedersonShare.modQ;				
-				PedersonShare y_e = PedersonComm.exponentiate(sign.publicKey, sign.e, channels);
-				BigInteger g_s = generator.modPow(sign.s, modQ);
-				BigInteger mPlusR = PedersonComm.combineShares(y_e.constMultiply(g_s).add(sign.message), channels);
+				BigInteger modQ = PedersonShare.modQ;
+
+				// Find g^s TODO(venkat): Confirm that bits of s are either 0
+				// or (g^i)^{-1}
+				BigInteger gPow = generator;
+				PedersonShare g_s = sign.s[0].constMultiply(gPow);
+				for (int i = 1; i < modQ.bitLength(); ++i) {
+						gPow = gPow.multiply(gPow).mod(modQ);
+						g_s = PedersonComm.multiply(g_s, sign.s[i].constMultiply(gPow), channels);
+				}
+
 				// Hash M || r
+				BigInteger mPlusR;
+				if (sign.publicKeyHidden) {
+						PedersonShare y_e = PedersonComm.exponentiate(sign.publicKey, sign.e, channels);
+						mPlusR = PedersonComm.combineShares(PedersonComm.multiply(y_e, g_s, channels)
+																													 .add(sign.message),
+																													 channels);
+				}
+				else {
+						// TODO: verify all thresholds in sign are same
+						PedersonShare mpr = PedersonShare.shareConstantValue(sign.publicKeyPt.modPow(sign.e, modQ),
+																																 sign.message.threshold,
+																																 numShares).add(sign.message);
+						mPlusR = PedersonComm.combineShares(mpr, channels);
+				}
+
+				
 				OpenSSLSHA256 hash = new OpenSSLSHA256();
 				hash.update(mPlusR.toByteArray(), 0 , mPlusR.toByteArray().length);
 				byte[] hashBytes = new byte[hash.getHashedMsgSize()];

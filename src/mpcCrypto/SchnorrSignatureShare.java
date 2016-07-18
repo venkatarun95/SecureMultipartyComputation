@@ -9,8 +9,13 @@ import pederson.PedersonShare;
  * message that is signed.
  */
 public class SchnorrSignatureShare implements Serializable {
+		// If true, publicKeyPt should be null otherwise publicKey should
+		// be.
+		public boolean publicKeyHidden;
 		public PedersonShare publicKey;
+		public BigInteger publicKeyPt;
 		public PedersonShare message;
 		BigInteger e;
-		BigInteger s;
+		// Bitwise shared
+		PedersonShare[] s;
 }
