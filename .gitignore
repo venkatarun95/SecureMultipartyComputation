@@ -7,5 +7,12 @@
 build
 *TEST-*
 
+# C files
+*.o
+.makepp*
+
 # Misc
 *.properties
+
+# Specific files
+src/psi
