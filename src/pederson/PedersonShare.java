@@ -34,7 +34,7 @@ public class PedersonShare implements Serializable {
 		// Commitments to make sure sharing is valid
 		BigInteger[] commitments;
 		// Number of shares required to reconstruct a secret
-		int threshold;
+		public int threshold;
 
 		// Copy constructor
 		private PedersonShare(BigInteger a_valData, BigInteger a_valVerif, BigInteger a_index, BigInteger[] a_commitments, int a_threshold) {

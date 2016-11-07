@@ -34,7 +34,7 @@ public class SchnorrSignature {
 		 * signer or contents of the message. This is a computational
 		 * guarantee.
 		 */
-		public static SchnorrSignatureShare[] sign(BigInteger message, BigInteger privateKey, bool publicKeyHidden, int threshold, int numShares) {
+		public static SchnorrSignatureShare[] sign(BigInteger message, BigInteger privateKey, boolean publicKeyHidden, int threshold, int numShares) {
 				SecureRandom random = new SecureRandom();
 				BigInteger modQ = PedersonShare.modQ;
 				// TODO: Verify!! modQ also probably needs to be a safe prime now.
@@ -75,7 +75,7 @@ public class SchnorrSignature {
 						if (publicKeyHidden)
 								result[i].publicKey = publicKeyShares[i];
 						else
-								result[i].publicKey = publickey;
+								result[i].publicKeyPt = PedersonShare.combineShares(publicKeyShares);
 						result[i].message = messageShares[i];
 						result[i].e = e;
 						result[i].s = new PedersonShare[modQ.bitLength()];
@@ -112,11 +112,13 @@ public class SchnorrSignature {
 																													 channels);
 				}
 				else {
+						assert(false);
 						// TODO: verify all thresholds in sign are same
-						PedersonShare mpr = PedersonShare.shareConstantValue(sign.publicKeyPt.modPow(sign.e, modQ),
-																																 sign.message.threshold,
-																																 numShares).add(sign.message);
-						mPlusR = PedersonComm.combineShares(mpr, channels);
+						// PedersonShare mpr = PedersonShare.shareConstValue(sign.publicKeyPt.modPow(sign.e, modQ),
+						// 						     sign.message.threshold,
+						// 						     channels.length).add(sign.message);
+						// mPlusR = PedersonComm.combineShares(mpr, channels);
+						mPlusR = null;
 				}
 
 				

@@ -28,8 +28,8 @@ public class Client {
 
 				// Prepare the signature shares
 				SchnorrSignatureShare[] signatureShares = SchnorrSignature.sign(BigInteger.valueOf(10),
-																																	 BigInteger.valueOf(878),
-																																	 2, 5);
+												BigInteger.valueOf(878),
+												true, 2, 5);
 				
 				ObjectInputStream[] inStreams = new ObjectInputStream[addresses.length];
 				ObjectOutputStream[] outStreams = new ObjectOutputStream[addresses.length];
@@ -37,7 +37,7 @@ public class Client {
 						try {
 								serverSockets[i] = new Socket(serverIps[i], serverPorts[i]);
 								outStreams[i] = new ObjectOutputStream(serverSockets[i].getOutputStream());
-								inStreams[i] = new ObjectInputStream(serverSockets[i].getInputStream());						
+								inStreams[i] = new ObjectInputStream(serverSockets[i].getInputStream());
 						}
 						catch (Exception e) { // TODO: be more specific
 								System.err.println("Error while establishing connection with server.");
