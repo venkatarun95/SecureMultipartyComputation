@@ -11,7 +11,7 @@ import pederson.PedersonComm;
 
 public class ClearTextProxy {
     PedersonShare[] randomKey;
-		int threshold;
+    int threshold;
     int numShares;
 
     /**
@@ -29,7 +29,7 @@ public class ClearTextProxy {
         for (int i = 0; i < numBits + 1; ++i)
             randomKey[i] = PedersonComm.shareRandomNumber(threshold, channels);
     }
-    
+
     /**
      * Generate a clear-text-proxy of the bit-shared secret using the
      * given random key and the given peers.
@@ -42,14 +42,14 @@ public class ClearTextProxy {
             throw new RuntimeException("Number of bits in plaintext needs to be the same as in the key (as specified in constructor).");
         if (numShares != channels.length)
             throw new RuntimeException("Number of channels given during construction does not match number of channels now.");
-				// TODO(venkat): verify that all bits have the same index
+        // TODO(venkat): verify that all bits have the same index
 
         // Share of the final result
         PedersonShare resultShare = randomKey[0];
         PedersonShare pedersonOne = PedersonShare.shareConstValue(BigInteger.valueOf(1),
-																																	threshold,
-																																	channels.length)[bits[0].index.intValue() - 1];
-        
+                                                                  threshold,
+                                                                  channels.length)[bits[0].index.intValue() - 1];
+
         for (int i = 0; i < bits.length; ++i) {
             PedersonShare term = PedersonComm.multiply(randomKey[i+1], bits[i], channels);
             term = term.add(pedersonOne);
@@ -57,7 +57,7 @@ public class ClearTextProxy {
             resultShare = PedersonComm.multiply(resultShare, term, channels);
         }
 
-				// TODO(venkat): Choose a proper generator
+        // TODO(venkat): Choose a proper generator
         return PedersonComm.plaintextExponentiate(PedersonShare.genVerif, resultShare, channels);
     }
 }
