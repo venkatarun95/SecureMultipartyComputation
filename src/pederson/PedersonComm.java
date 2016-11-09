@@ -468,99 +468,162 @@ public class PedersonComm {
      * should be a null in that position. Position of share is
      * considered to be (index of share - 1)
      */
-    // private static Element reconstructExponentiatedShares(BigInteger[] shares, int threshold, int numShares) {
-    //     assert numShares >= shares.length;
-    //     Element result = PedersonShare.group.newElement(1);
-    //     BigInteger modQ = PedersonShare.modQ;
-    //     int numNonNullShares = 0;
-    //     // Make all shares we are not going to use null
-    //     for (int i = 0; i < shares.length; ++i) {
-    //         if (shares[i] == null)
-    //             continue;
-    //         ++numNonNullShares;
-    //         if (numNonNullShares > threshold)
-    //             shares[i] = null;
-    //     }
-    //     if (numNonNullShares < threshold)
-    //         throw new RuntimeException("Insufficient number of shares to compute value + " + numNonNullShares);
+    private static Element reconstructExponentiatedShares(Element[] shares, int threshold, int numShares) {
+        assert numShares >= shares.length;
+        Element result = PedersonShare.group.newElement(1);
+        BigInteger modQ = PedersonShare.modQ;
+        int numNonNullShares = 0;
+        // Make all shares we are not going to use null
+        for (int i = 0; i < shares.length; ++i) {
+            if (shares[i] == null)
+                continue;
+            ++numNonNullShares;
+            if (numNonNullShares > threshold)
+                shares[i] = null;
+        }
+        if (numNonNullShares < threshold)
+            throw new RuntimeException("Insufficient number of shares to compute value + " + numNonNullShares);
 
-    //     for (int i = 0; i < shares.length; ++i) {
-    //         if (shares[i] == null)
-    //             continue;
+        for (int i = 0; i < shares.length; ++i) {
+            if (shares[i] == null)
+                continue;
 
-    //         BigInteger coeff = BigInteger.ONE;
-    //         for (int j = 1; j <= numShares; ++j) {
-    //             if (j == i + 1)
-    //                 continue;
-    //             if (shares[j - 1] == null)
-    //                 continue;
-    //             coeff = coeff.multiply(BigInteger.valueOf(j)).mod(modQ);
-    //             coeff = coeff.multiply(BigInteger.valueOf(j - i - 1).modInverse(modQ)).mod(modQ);
-    //         }
-    //         result.mul(shares[i].pow(coeff));
-    //     }
-    //     return result;
-    // }
+            BigInteger coeff = BigInteger.ONE;
+            for (int j = 1; j <= numShares; ++j) {
+                if (j == i + 1)
+                    continue;
+                if (shares[j - 1] == null)
+                    continue;
+                coeff = coeff.multiply(BigInteger.valueOf(j)).mod(modQ);
+                coeff = coeff.multiply(BigInteger.valueOf(j - i - 1).modInverse(modQ)).mod(modQ);
+            }
+            result.mul(shares[i].pow(coeff));
+        }
+        return result;
+    }
+
+		/**
+		 * Computes g ^ {shared value} where g is
+		 * <code>PedersonShare.genData</code>.
+		 */
+		public static Element plaintextExponentiate(PedersonShare share, Channel[] channels) throws IOException, CheatAttemptException {
+				// Broadcast g^share and h^share
+				Element exp1 = PedersonShare.genData_pp.pow(share.valData);
+				Element exp2 = PedersonShare.genVerif_pp.pow(share.valVerif);
+				Element[] exp1s = new Element[channels.length];
+				Element[] exp2s = new Element[channels.length];
+				for (int i = 0; i < channels.length; ++i) {
+						if (channels[i] == null) {
+								exp1s[i] = exp1;
+								exp2s[i] = exp2;
+								continue;
+						}
+						channels[i].send(exp1.toBytes());
+						channels[i].send(exp2.toBytes());
+				}
+
+				// Get other people's 'broadcast's. Note we needn't check if
+				// same value is broadcast to all since we are verifying the
+				// commitment anyway.
+				for (int i = 0; i < channels.length; ++i) {
+						if (channels[i] == null)
+								continue;
+						exp1s[i] = PedersonShare.group.newElementFromBytes((byte[])receive(channels[i]));
+						exp2s[i] = PedersonShare.group.newElementFromBytes((byte[])receive(channels[i]));
+						Element check = exp1s[i].duplicate().mul(exp2s[i]);
+						if (!check.isEqual(share.computeMac(BigInteger.valueOf(i+1)))) {
+								System.err.println("Verification failed for party " + (i+1) + " during plaintext exponentiation.");
+								exp1s[i] = null;
+								exp2s[i] = null;
+						}
+				}
+
+				// Interpolate in the exponent to get the result
+				BigInteger modQ = PedersonShare.modQ;
+				Element result = PedersonShare.group.newElement(1);
+				int numUsed = 0;
+        for (int i = 0; i < exp1s.length; ++i) {
+            if (exp1s[i] == null)
+                continue;
+						if (numUsed >= share.threshold)
+								break;
+						++numUsed;
+
+            BigInteger coeff = BigInteger.ONE;
+            for (int j = 1; j <= exp1s.length; ++j) {
+                if (j == i + 1)
+                    continue;
+                if (exp1s[j - 1] == null)
+                    continue;
+                coeff = coeff.multiply(BigInteger.valueOf(j)).mod(modQ);
+                coeff = coeff.multiply(BigInteger.valueOf(j - i - 1).modInverse(modQ)).mod(modQ);
+            }
+            result.mul(exp1s[i].pow(coeff));
+        }
+				if (numUsed < share.threshold)
+						throw new RuntimeException("Did not receive enough correct shares from others to exponentiate.");
+				return result;
+		}
 
     /**
      * Computes generator ^ {shared value} (mod PedersonShare.modQ)
      */
     // public static BigInteger plaintextExponentiate(Element generator, PedersonShare share, Channel[] channels) throws IOException, CheatAttemptException {
-    //     // TODO: Make sure generator is actually a generator of
-    //     // PedersonShare.modQ
+        // TODO: Make sure generator is actually a generator of
+        // PedersonShare.modQ
 
-    //     // Share random number so we can check if result is actually
-    //     // correct (or if someone cheated).
-    //     PedersonShare randNumShare = shareRandomNumber(share.threshold, channels);
-    //     PedersonShare challengeShare = multiply(randNumShare, share, channels);
+        // Share random number so we can check if result is actually
+        // correct (or if someone cheated).
+        // PedersonShare randNumShare = shareRandomNumber(share.threshold, channels);
+        // PedersonShare challengeShare = multiply(randNumShare, share, channels);
 
 
-    //     // Broadcast g^{our share} and g^{challenge share}
-    //     Element[] shareExps = new Element[channels.length];
-    //     Element[] challengeExps = new Element[channels.length];
-    //     BigInteger ourShareExp = generator.pow(share.valData);
-    //     BigInteger ourChallengeExp = generator.pow(challengeShare.valData);
+        // // Broadcast g^{our share} and g^{challenge share}
+        // Element[] shareExps = new Element[channels.length];
+        // Element[] challengeExps = new Element[channels.length];
+        // Element ourShareExp = generator.duplicate.pow(share.valData);
+        // Element ourChallengeExp = generator.duplicate().pow(challengeShare.valData);
 
-    //     for (int i = 0; i < channels.length; ++i) {
-    //         if (channels[i] != null) {
-    //             try {
-    //                 channels[i].send(ourShareExp);
-    //                 channels[i].send(ourChallengeExp);
-    //             }
-    //             catch (IOException e) {
-    //                 throw new IOException("Could not communicate with peer " + i + " while sending message. Error: " + e.getMessage());
-    //             }
-    //         }
-    //     }
+        // for (int i = 0; i < channels.length; ++i) {
+        //     if (channels[i] != null) {
+        //         try {
+        //             channels[i].send(ourShareExp);
+        //             channels[i].send(ourChallengeExp);
+        //         }
+        //         catch (IOException e) {
+        //             throw new IOException("Could not communicate with peer " + i + " while sending message. Error: " + e.getMessage());
+        //         }
+        //     }
+        // }
 
-    //     // Receive g^{share} and g^{challenge share} from others
-    //     for (int i = 0; i < channels.length; ++i) {
-    //         if (channels[i] == null) {
-    //             shareExps[i] = ourShareExp;
-    //             challengeExps[i] = ourChallengeExp;
-    //         }
-    //         else {
-    //             try {
-    //                 shareExps[i] = receive(channels[i]);
-    //                 challengeExps[i] = receive(channels[i]);
-    //             }
-    //             catch (IOException e) {
-    //                 throw new IOException("Could not communicate with peer " + i + " while receiving message. Error: " + e.getMessage());
-    //             }
-    //         }
-    //     }
+        // // Receive g^{share} and g^{challenge share} from others
+        // for (int i = 0; i < channels.length; ++i) {
+        //     if (channels[i] == null) {
+        //         shareExps[i] = ourShareExp;
+        //         challengeExps[i] = ourChallengeExp;
+        //     }
+        //     else {
+        //         try {
+        //             shareExps[i] = receive(channels[i]);
+        //             challengeExps[i] = receive(channels[i]);
+        //         }
+        //         catch (IOException e) {
+        //             throw new IOException("Could not communicate with peer " + i + " while receiving message. Error: " + e.getMessage());
+        //         }
+        //     }
+        // }
 
-    //     // Reconstruct challenge random number
-    //     BigInteger challenge = combineShares(randNumShare, channels);
+        // // Reconstruct challenge random number
+        // BigInteger challenge = combineShares(randNumShare, channels);
 
-    //     // Reconstruct the exponentiated value
-    //     BigInteger result = reconstructExponentiatedShares(shareExps, share.threshold, channels.length);
-    //     BigInteger challengeResult = reconstructExponentiatedShares(challengeExps, share.threshold, channels.length);
+        // // Reconstruct the exponentiated value
+        // BigInteger result = reconstructExponentiatedShares(shareExps, share.threshold, channels.length);
+        // BigInteger challengeResult = reconstructExponentiatedShares(challengeExps, share.threshold, channels.length);
 
-    //     if (result.pow(challenge).isEqual(challengeResult) != 0)
-    //         throw new CheatAttemptException("Reconstructed result did not pass verification.");
-    //     return result;
-    // }
+        // if (result.pow(challenge).isEqual(challengeResult) != 0)
+        //     throw new CheatAttemptException("Reconstructed result did not pass verification.");
+        // return result;
+		//}
 
     /**
      * Compute shares of generator ^ {exponent}.

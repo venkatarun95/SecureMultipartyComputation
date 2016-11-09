@@ -121,14 +121,14 @@ public class Test {
         if (PedersonComm.combineShares(mult, channels).intValue() != 210)
             throw new RuntimeException("Error in multiplication. Test Failed.");
 
-        // // Share a random value and open it
-        // PedersonShare randValShare = PedersonComm.shareRandomNumber(2, channels);
-        // BigInteger randVal = PedersonComm.combineShares(randValShare, channels);
+        // Share a random value and open it
+        PedersonShare randValShare = PedersonComm.shareRandomNumber(3, channels);
+        BigInteger randVal = PedersonComm.combineShares(randValShare, channels);
 
-        // // Test plaintext exponentiation
-        // BigInteger ptExponentiated = PedersonComm.plaintextExponentiate(BigInteger.valueOf(4), randValShare, channels);
-        // if (ptExponentiated.compareTo(BigInteger.valueOf(4).modPow(randVal, PedersonShare.mod)) != 0)
-        //     throw new RuntimeException("Error in plaintext exponentiation. Result did not match what was expected.");
+        // Test plaintext exponentiation
+        Element ptExponentiated = PedersonComm.plaintextExponentiate(randValShare, channels);
+        if (!ptExponentiated.isEqual(PedersonShare.genData_pp.pow(randVal)))
+            throw new RuntimeException("Error in plaintext exponentiation. Result did not match what was expected.");
 
         // // Test exponentiation
         // BigInteger exponent = new BigInteger("29743");
