@@ -11,6 +11,9 @@ import edu.biu.scapi.comm.Channel;
 import edu.biu.scapi.exceptions.CheatAttemptException;
 import edu.biu.scapi.primitives.hash.openSSL.OpenSSLSHA512;
 
+import it.unisa.dia.gas.jpbc.*;
+import it.unisa.dia.gas.plaf.jpbc.pairing.PairingFactory;
+
 import pederson.PedersonShare;
 
 /**
@@ -50,25 +53,31 @@ public class PedersonComm {
      * (ie. position in array can be used as player id). At this
      * player's position, channels should contain <code>null</code>
      */
-    private static boolean verifyCommitmentEquality(BigInteger[] localCommitment, Channel[] channels) throws IOException {
+    private static void verifyCommitmentEquality(Element[] localCommitment, Channel[] channels) throws IOException {
         assert channels != null && localCommitment != null;
         assert channels.length == localCommitment.length;
         assert channels.length > 0;
 
         // Send out commitment to everybody
+				byte[][] localCommitment_bytes = new byte[localCommitment.length][];
+				for (int i = 0; i < localCommitment.length; ++i)
+						localCommitment_bytes[i] = localCommitment[i].toBytes();
         for (int i = 0; i < channels.length; ++i)
             if (channels[i] != null)
-                channels[i].send(localCommitment);
+                channels[i].send(localCommitment_bytes);
 
         // Receive commitments from others;
-        BigInteger[][] commitments = new BigInteger[channels.length][];
+        Element[][] commitments = new Element[channels.length][];
         for (int i  = 0; i < channels.length; ++i) {
             if (channels[i] == null) {
                 commitments[i] = localCommitment; // Corresponds to this player
                 continue;
             }
             try {
-                commitments[i] = (BigInteger[])channels[i].receive();
+								byte[][] commitment_bytes = (byte[][])channels[i].receive();
+								commitments[i] = new Element[commitment_bytes.length];
+								for (int j = 0; j < commitments[i].length; ++j)
+										commitments[i][j] = PedersonShare.group.newElementFromBytes(commitment_bytes[j]);
             }
             catch (ClassNotFoundException e) {
                 System.err.println(e.getMessage());
@@ -76,21 +85,34 @@ public class PedersonComm {
         }
 
         // Verify that commitments are equal
-        BigInteger[] commitment = commitments[0];
+        Element[] commitment = commitments[0];
         for (int i = 1; i < commitments.length; ++i) {
             if (commitment.length != commitments[i].length)
-                return false;
-            for (int j = 0; j < commitment.length; ++j)
-                if (commitment[j].compareTo(commitments[i][j]) != 0)
-                    return false;
+                throw new RuntimeException("Different parties have different number of commitments.");
+            for (int j = 0; j < commitment.length; ++j) {
+								// TODO(venkat): Throw exception here. Don't wait for it to go outside.
+                if (!commitment[j].isEqual(commitments[i][j]))
+                    throw new RuntimeException("Different parties have different commitments");
+						}
         }
-        return true;
     }
 
     /**
      * Utility function to handle exceptions from the @reference
      * Channel.receive method
      */
+		// static private <Element> Element receive(Channel channel) throws IOException {
+    //     assert channel != null;
+    //     try {
+    //         //byte[] recvd = channel.receive();
+		// 				Element res = channel.receive();;// = PedersonShare.group.newElement();
+		// 				//res.setFromBytes(recvd);
+    //         return res;
+    //     }
+    //     catch (ClassNotFoundException e) {
+    //         throw new IOException(e.getMessage());
+    //     }
+    // }
     static private <T> T receive(Channel channel) throws IOException {
         assert channel != null;
         try {
@@ -240,6 +262,7 @@ public class PedersonComm {
         PedersonShare myShare = null;
         for (int i = 0; i < shares.length; ++i) {
             if (channels[i] == null) {
+								assert myShare == null;
                 myShare = shares[i];
                 assert myShare != null;
                 continue;
@@ -322,77 +345,77 @@ public class PedersonComm {
      *
      * Requires interaction with 2 * threshold + 1 peers.
      */
-    public static PedersonShare multiply(PedersonShare val1, PedersonShare val2, Channel[] channels) throws IOException, CheatAttemptException {
-        PedersonMultiply prover = new PedersonMultiply();
+    // public static PedersonShare multiply(PedersonShare val1, PedersonShare val2, Channel[] channels) throws IOException, CheatAttemptException {
+    //     PedersonMultiply prover = new PedersonMultiply();
 
-        // Share polynomial and get shares from others.
+    //     // Share polynomial and get shares from others.
 
-        // TODO(venkat): This can be done in parallel instead of
-        // party-by-party.
-        PedersonShare[] myPoly = prover.sharedPoly(val1, val2, channels.length);
-        PedersonShare[] shares = new PedersonShare[channels.length];
-        int ourIndex = -1;
-        for (int i = 0; i < channels.length; ++i) {
-            if (channels[i] == null) {
-                shareSender(myPoly, channels);
-                // Our share of our polynomial.
-                shares[i] = myPoly[i];
-                ourIndex = i;
-            }
-            else
-                shares[i] = shareReceiver(i, channels);
-        }
+    //     // TODO(venkat): This can be done in parallel instead of
+    //     // party-by-party.
+    //     PedersonShare[] myPoly = prover.sharedPoly(val1, val2, channels.length);
+    //     PedersonShare[] shares = new PedersonShare[channels.length];
+    //     int ourIndex = -1;
+    //     for (int i = 0; i < channels.length; ++i) {
+    //         if (channels[i] == null) {
+    //             shareSender(myPoly, channels);
+    //             // Our share of our polynomial.
+    //             shares[i] = myPoly[i];
+    //             ourIndex = i;
+    //         }
+    //         else
+    //             shares[i] = shareReceiver(i, channels);
+    //     }
 
-        // Commit to coin toss
-        byte[][] coinTossCommitments = coinTossCommit(PedersonShare.modQ.bitLength() * channels.length, channels);
+    //     // Commit to coin toss
+    //     byte[][] coinTossCommitments = coinTossCommit(PedersonShare.modQ.bitLength() * channels.length, channels);
 
-        // Broadcast commitment to ZKP
-        BigInteger[] ourZkpCommitment = prover.zkpProverStep1();
-        for (Channel channel : channels)
-            if (channel != null)
-                channel.send(ourZkpCommitment);
+    //     // Broadcast commitment to ZKP
+    //     BigInteger[] ourZkpCommitment = prover.zkpProverStep1();
+    //     for (Channel channel : channels)
+    //         if (channel != null)
+    //             channel.send(ourZkpCommitment);
 
-        // Receive commitments to ZKP from others
-        BigInteger[][] zkpCommitments = new BigInteger[channels.length][];
-        for (int i = 0; i < channels.length; ++i)
-            if (channels[i] != null) {
-                zkpCommitments[i] = receive(channels[i]);
-            }
+    //     // Receive commitments to ZKP from others
+    //     BigInteger[][] zkpCommitments = new BigInteger[channels.length][];
+    //     for (int i = 0; i < channels.length; ++i)
+    //         if (channels[i] != null) {
+    //             zkpCommitments[i] = receive(channels[i]);
+    //         }
 
-        // Open coin toss
-        byte[] coinToss = coinTossDecommit(coinTossCommitments, channels);
-        BigInteger[] challenges = new BigInteger[channels.length];
-        for (int i = 0; i < channels.length; ++i) {
-            int bitLength = 1 + (PedersonShare.modQ.bitLength() - 1) / 8;
-            challenges[i] = new BigInteger(Arrays.copyOfRange(coinToss,
-                                                              i * bitLength,
-                                                              (i + 1) * bitLength)).
-                mod(PedersonShare.modQ);
-        }
+    //     // Open coin toss
+    //     byte[] coinToss = coinTossDecommit(coinTossCommitments, channels);
+    //     BigInteger[] challenges = new BigInteger[channels.length];
+    //     for (int i = 0; i < channels.length; ++i) {
+    //         int bitLength = 1 + (PedersonShare.modQ.bitLength() - 1) / 8;
+    //         challenges[i] = new BigInteger(Arrays.copyOfRange(coinToss,
+    //                                                           i * bitLength,
+    //                                                           (i + 1) * bitLength)).
+    //             mod(PedersonShare.modQ);
+    //     }
 
-        // Broadcast our response
-        BigInteger[] zkpResponse = prover.zkpProverStep2(challenges[ourIndex]);
-        for (Channel channel : channels)
-            if (channel != null)
-                channel.send(zkpResponse);
+    //     // Broadcast our response
+    //     BigInteger[] zkpResponse = prover.zkpProverStep2(challenges[ourIndex]);
+    //     for (Channel channel : channels)
+    //         if (channel != null)
+    //             channel.send(zkpResponse);
 
-        // Get other's responses and verify them
-        for (int i = 0; i < challenges.length; ++i) {
-            if (channels[i] != null) {
-                BigInteger[] response = receive(channels[i]);
-                if (!prover.verifyProof(i + 1, shares[i], zkpCommitments[i], challenges[i], response))
-                    throw new CheatAttemptException("Zero Knowoledge Proof failed for player " + i);
-            }
-        }
+    //     // Get other's responses and verify them
+    //     for (int i = 0; i < challenges.length; ++i) {
+    //         if (channels[i] != null) {
+    //             BigInteger[] response = receive(channels[i]);
+    //             if (!prover.verifyProof(i + 1, shares[i], zkpCommitments[i], challenges[i], response))
+    //                 throw new CheatAttemptException("Zero Knowoledge Proof failed for player " + i);
+    //         }
+    //     }
 
-        // Add shares to get share for result
-        PedersonShare result = shares[0].constMultiply(PedersonMultiply.getVandermondeInv(1, 1, channels.length));
-        for (int i = 1; i < shares.length; ++i) {
-            BigInteger lambda = PedersonMultiply.getVandermondeInv(i + 1, 1, channels.length);
-            result = result.add(shares[i].constMultiply(lambda));
-        }
-        return result;
-    }
+    //     // Add shares to get share for result
+    //     PedersonShare result = shares[0].constMultiply(PedersonMultiply.getVandermondeInv(1, 1, channels.length));
+    //     for (int i = 1; i < shares.length; ++i) {
+    //         BigInteger lambda = PedersonMultiply.getVandermondeInv(i + 1, 1, channels.length);
+    //         result = result.add(shares[i].constMultiply(lambda));
+    //     }
+    //     return result;
+    // }
 
     /**
      * Generate share of a random number that no party knows about as
@@ -437,116 +460,116 @@ public class PedersonComm {
      * should be a null in that position. Position of share is
      * considered to be (index of share - 1)
      */
-    private static BigInteger reconstructExponentiatedShares(BigInteger[] shares, int threshold, int numShares) {
-        assert numShares >= shares.length;
-        BigInteger result = BigInteger.ONE;
-        BigInteger modQ = PedersonShare.modQ, mod = PedersonShare.mod;
-        int numNonNullShares = 0;
-        // Make all shares we are not going to use null
-        for (int i = 0; i < shares.length; ++i) {
-            if (shares[i] == null)
-                continue;
-            ++numNonNullShares;
-            if (numNonNullShares > threshold)
-                shares[i] = null;
-        }
-        if (numNonNullShares < threshold)
-            throw new RuntimeException("Insufficient number of shares to compute value + " + numNonNullShares);
+    // private static Element reconstructExponentiatedShares(BigInteger[] shares, int threshold, int numShares) {
+    //     assert numShares >= shares.length;
+    //     Element result = PedersonShare.group.newElement(1);
+    //     BigInteger modQ = PedersonShare.modQ;
+    //     int numNonNullShares = 0;
+    //     // Make all shares we are not going to use null
+    //     for (int i = 0; i < shares.length; ++i) {
+    //         if (shares[i] == null)
+    //             continue;
+    //         ++numNonNullShares;
+    //         if (numNonNullShares > threshold)
+    //             shares[i] = null;
+    //     }
+    //     if (numNonNullShares < threshold)
+    //         throw new RuntimeException("Insufficient number of shares to compute value + " + numNonNullShares);
 
-        for (int i = 0; i < shares.length; ++i) {
-            if (shares[i] == null)
-                continue;
+    //     for (int i = 0; i < shares.length; ++i) {
+    //         if (shares[i] == null)
+    //             continue;
 
-            BigInteger coeff = BigInteger.ONE;
-            for (int j = 1; j <= numShares; ++j) {
-                if (j == i + 1)
-                    continue;
-                if (shares[j - 1] == null)
-                    continue;
-                coeff = coeff.multiply(BigInteger.valueOf(j)).mod(modQ);
-                coeff = coeff.multiply(BigInteger.valueOf(j - i - 1).modInverse(modQ)).mod(modQ);
-            }
-            result = result.multiply(shares[i].modPow(coeff, mod)).mod(mod);
-        }
-        return result;
-    }
+    //         BigInteger coeff = BigInteger.ONE;
+    //         for (int j = 1; j <= numShares; ++j) {
+    //             if (j == i + 1)
+    //                 continue;
+    //             if (shares[j - 1] == null)
+    //                 continue;
+    //             coeff = coeff.multiply(BigInteger.valueOf(j)).mod(modQ);
+    //             coeff = coeff.multiply(BigInteger.valueOf(j - i - 1).modInverse(modQ)).mod(modQ);
+    //         }
+    //         result.mul(shares[i].pow(coeff));
+    //     }
+    //     return result;
+    // }
 
     /**
      * Computes generator ^ {shared value} (mod PedersonShare.modQ)
      */
-    public static BigInteger plaintextExponentiate(BigInteger generator, PedersonShare share, Channel[] channels) throws IOException, CheatAttemptException {
-        // TODO: Make sure generator is actually a generator of
-        // PedersonShare.modQ
+    // public static BigInteger plaintextExponentiate(Element generator, PedersonShare share, Channel[] channels) throws IOException, CheatAttemptException {
+    //     // TODO: Make sure generator is actually a generator of
+    //     // PedersonShare.modQ
 
-        // Share random number so we can check if result is actually
-        // correct (or if someone cheated).
-        PedersonShare randNumShare = shareRandomNumber(share.threshold, channels);
-        PedersonShare challengeShare = multiply(randNumShare, share, channels);
+    //     // Share random number so we can check if result is actually
+    //     // correct (or if someone cheated).
+    //     PedersonShare randNumShare = shareRandomNumber(share.threshold, channels);
+    //     PedersonShare challengeShare = multiply(randNumShare, share, channels);
 
 
-        // Broadcast g^{our share} and g^{challenge share}
-        BigInteger[] shareExps = new BigInteger[channels.length];
-        BigInteger[] challengeExps = new BigInteger[channels.length];
-        BigInteger ourShareExp = generator.modPow(share.valData, PedersonShare.mod);
-        BigInteger ourChallengeExp = generator.modPow(challengeShare.valData, PedersonShare.mod);
+    //     // Broadcast g^{our share} and g^{challenge share}
+    //     Element[] shareExps = new Element[channels.length];
+    //     Element[] challengeExps = new Element[channels.length];
+    //     BigInteger ourShareExp = generator.pow(share.valData);
+    //     BigInteger ourChallengeExp = generator.pow(challengeShare.valData);
 
-        for (int i = 0; i < channels.length; ++i) {
-            if (channels[i] != null) {
-                try {
-                    channels[i].send(ourShareExp);
-                    channels[i].send(ourChallengeExp);
-                }
-                catch (IOException e) {
-                    throw new IOException("Could not communicate with peer " + i + " while sending message. Error: " + e.getMessage());
-                }
-            }
-        }
+    //     for (int i = 0; i < channels.length; ++i) {
+    //         if (channels[i] != null) {
+    //             try {
+    //                 channels[i].send(ourShareExp);
+    //                 channels[i].send(ourChallengeExp);
+    //             }
+    //             catch (IOException e) {
+    //                 throw new IOException("Could not communicate with peer " + i + " while sending message. Error: " + e.getMessage());
+    //             }
+    //         }
+    //     }
 
-        // Receive g^{share} and g^{challenge share} from others
-        for (int i = 0; i < channels.length; ++i) {
-            if (channels[i] == null) {
-                shareExps[i] = ourShareExp;
-                challengeExps[i] = ourChallengeExp;
-            }
-            else {
-                try {
-                    shareExps[i] = receive(channels[i]);
-                    challengeExps[i] = receive(channels[i]);
-                }
-                catch (IOException e) {
-                    throw new IOException("Could not communicate with peer " + i + " while receiving message. Error: " + e.getMessage());
-                }
-            }
-        }
+    //     // Receive g^{share} and g^{challenge share} from others
+    //     for (int i = 0; i < channels.length; ++i) {
+    //         if (channels[i] == null) {
+    //             shareExps[i] = ourShareExp;
+    //             challengeExps[i] = ourChallengeExp;
+    //         }
+    //         else {
+    //             try {
+    //                 shareExps[i] = receive(channels[i]);
+    //                 challengeExps[i] = receive(channels[i]);
+    //             }
+    //             catch (IOException e) {
+    //                 throw new IOException("Could not communicate with peer " + i + " while receiving message. Error: " + e.getMessage());
+    //             }
+    //         }
+    //     }
 
-        // Reconstruct challenge random number
-        BigInteger challenge = combineShares(randNumShare, channels);
+    //     // Reconstruct challenge random number
+    //     BigInteger challenge = combineShares(randNumShare, channels);
 
-        // Reconstruct the exponentiated value
-        BigInteger result = reconstructExponentiatedShares(shareExps, share.threshold, channels.length);
-        BigInteger challengeResult = reconstructExponentiatedShares(challengeExps, share.threshold, channels.length);
+    //     // Reconstruct the exponentiated value
+    //     BigInteger result = reconstructExponentiatedShares(shareExps, share.threshold, channels.length);
+    //     BigInteger challengeResult = reconstructExponentiatedShares(challengeExps, share.threshold, channels.length);
 
-        if (result.modPow(challenge, PedersonShare.mod).compareTo(challengeResult) != 0)
-            throw new CheatAttemptException("Reconstructed result did not pass verification.");
-        return result;
-    }
+    //     if (result.pow(challenge).isEqual(challengeResult) != 0)
+    //         throw new CheatAttemptException("Reconstructed result did not pass verification.");
+    //     return result;
+    // }
 
     /**
      * Compute shares of generator ^ {exponent}.
      */
-    public static PedersonShare exponentiate(PedersonShare generator, BigInteger exponent, Channel[] channels) throws IOException {
-        PedersonShare result = null;
-        // Equals generator^{2^i} in the loop
-        PedersonShare curExponent = generator;
-        for (int i = 0; i < exponent.bitLength(); ++i) {
-            if (exponent.testBit(i)) {
-                if (result == null)
-                    result = curExponent;
-                else
-                    result = PedersonComm.multiply(result, curExponent, channels);
-            }
-            curExponent = PedersonComm.multiply(curExponent, curExponent, channels);
-        }
-        return result;
-    }
+    // public static PedersonShare exponentiate(PedersonShare generator, BigInteger exponent, Channel[] channels) throws IOException {
+    //     PedersonShare result = null;
+    //     // Equals generator^{2^i} in the loop
+    //     PedersonShare curExponent = generator;
+    //     for (int i = 0; i < exponent.bitLength(); ++i) {
+    //         if (exponent.testBit(i)) {
+    //             if (result == null)
+    //                 result = curExponent;
+    //             else
+    //                 result = PedersonComm.multiply(result, curExponent, channels);
+    //         }
+    //         curExponent = PedersonComm.multiply(curExponent, curExponent, channels);
+    //     }
+    //     return result;
+    // }
 }
