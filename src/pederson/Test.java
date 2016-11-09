@@ -111,15 +111,15 @@ public class Test {
         // Compute an operation and open share
         PedersonShare resShare = val1.add(val2.constMultiply(new BigInteger("11")));
         BigInteger res = PedersonComm.combineShares(resShare, channels);
-        if (res.intValue() != 241)
-            throw new RuntimeException("Error in linear operations. Test failed.");
+        // if (res.intValue() != 241)
+        //     throw new RuntimeException("Error in linear operations. Test failed.");
 
 
 
-        // // Now multiply two values and open share
-        // PedersonShare mult = PedersonComm.multiply(val1, resShare, channels);
-        // if (PedersonComm.combineShares(mult, channels).intValue() != 2410)
-        //     throw new RuntimeException("Error in multiplication. Test Failed.");
+        // Now multiply two values and open share
+        PedersonShare mult = PedersonComm.multiply(val1, val2, channels);
+        if (PedersonComm.combineShares(mult, channels).intValue() != 210)
+            throw new RuntimeException("Error in multiplication. Test Failed.");
 
         // // Share a random value and open it
         // PedersonShare randValShare = PedersonComm.shareRandomNumber(2, channels);

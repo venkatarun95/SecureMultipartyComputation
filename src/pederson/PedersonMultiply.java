@@ -1,5 +1,6 @@
 package pederson;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.math.BigInteger;
 import java.security.SecureRandom;
@@ -7,6 +8,9 @@ import java.security.SecureRandom;
 import matrix.Matrix;
 import matrix.MatrixMathematics;
 import matrix.NoSquareException;
+
+import it.unisa.dia.gas.jpbc.*;
+import it.unisa.dia.gas.plaf.jpbc.pairing.PairingFactory;
 
 import pederson.PedersonShare;
 
@@ -69,6 +73,7 @@ public class PedersonMultiply {
             catch (NoSquareException e) {
                 throw new RuntimeException("Programming error: Generated matrix is not square.");
             }
+						// Cache the inverse matrix
             vandermondeInv.put(n, inverse);
         }
         return BigInteger.valueOf((long)Math.round(inverse.getValueAt(x-1, y-1)));
@@ -90,7 +95,7 @@ public class PedersonMultiply {
         shares = PedersonShare.shareValue(a.valData.multiply(b.valData).mod(PedersonShare.modQ),
                                           a.threshold,
                                           numShares);
-
+				
         alpha = a.valData;
         rho = a.valVerif;
         beta = b.valData;
@@ -110,7 +115,7 @@ public class PedersonMultiply {
      * To tolerate malicious verifiers, the verifies must have
      * commited to a random challenge.
      */
-    public BigInteger[] zkpProverStep1() {
+    public Element[] zkpProverStep1() {
         assert state == State.POLY_SENT;
         int numBits = PedersonShare.modQ.bitLength();
         d = new BigInteger(numBits, random).mod(PedersonShare.modQ);
@@ -119,18 +124,14 @@ public class PedersonMultiply {
         s1 = new BigInteger(numBits, random).mod(PedersonShare.modQ);
         s2 = new BigInteger(numBits, random).mod(PedersonShare.modQ);
 
-        BigInteger[] result = new BigInteger[3];
-        result[0] = PedersonShare.genData.modPow(d, PedersonShare.mod).
-            multiply(PedersonShare.genVerif.modPow(s, PedersonShare.mod)).
-            mod(PedersonShare.mod);
-        result[1] = PedersonShare.genData.modPow(x, PedersonShare.mod).
-            multiply(PedersonShare.genVerif.modPow(s1, PedersonShare.mod)).
-            mod(PedersonShare.mod);
-        result[2] = bShare.computeMac(bShare.index)
-            .modPow(x, PedersonShare.mod).
-            multiply(PedersonShare.genVerif.modPow(s2, PedersonShare.mod)).
-            mod(PedersonShare.mod);
-
+        Element[] result = new Element[3];
+        result[0] = PedersonShare.genData_pp.pow(d).
+            mul(PedersonShare.genVerif_pp.pow(s));
+        result[1] = PedersonShare.genData_pp.pow(x).
+            mul(PedersonShare.genVerif_pp.pow(s1));
+        result[2] = bShare.computeMac(bShare.index).pow(x).
+            mul(PedersonShare.genVerif_pp.pow(s2));
+				
         state = State.ZKP_STEP1_DONE;
         return result;
     }
@@ -148,7 +149,7 @@ public class PedersonMultiply {
         // Reconstruct tau. We could have taken it while constructing
         // the shares, but this is more modular.
         BigInteger tau = BigInteger.ZERO;
-        BigInteger mod = PedersonShare.mod, modQ = PedersonShare.modQ;
+        BigInteger modQ = PedersonShare.modQ;
         for (int i = 0; i < threshold; ++i) {
             BigInteger coeff = BigInteger.ONE;
             for (int j = 0; j < threshold; ++j) {
@@ -188,29 +189,28 @@ public class PedersonMultiply {
      * possubly using zkpProverStep2 @see
      * pederson.PedersonMultiply.zkpProverStep2
      */
-    public boolean verifyProof(int otherIndex, PedersonShare share, BigInteger[] commitments, BigInteger challenge, BigInteger[] response) {
-        BigInteger A = aShare.computeMac(BigInteger.valueOf(otherIndex));
-        BigInteger B = bShare.computeMac(BigInteger.valueOf(otherIndex));
-        BigInteger C = share.commitments[0];// share.computeMac(BigInteger.valueOf(otherIndex));
-        BigInteger mod = PedersonShare.mod;
-        BigInteger genData = PedersonShare.genData, genVerif = PedersonShare.genVerif;
+    public boolean verifyProof(int otherIndex, PedersonShare share, Element[] commitments, BigInteger challenge, BigInteger[] response) {
+        Element A = aShare.computeMac(BigInteger.valueOf(otherIndex));
+        Element B = bShare.computeMac(BigInteger.valueOf(otherIndex));
+        Element C = share.commitments[0];// share.computeMac(BigInteger.valueOf(otherIndex));
+        ElementPowPreProcessing genData_pp = PedersonShare.genData_pp, genVerif_pp = PedersonShare.genVerif_pp;
 
-        BigInteger check1Lhs = genData.modPow(response[0], mod).
-            multiply(genVerif.modPow(response[1], mod)).mod(mod);
-        BigInteger check1Rhs = commitments[0].multiply(B.modPow(challenge, mod)).mod(mod);
-        if (check1Lhs.compareTo(check1Rhs) != 0)
+        Element check1Lhs = genData_pp.pow(response[0]).
+            mul(genVerif_pp.pow(response[1]));
+        Element check1Rhs = commitments[0].duplicate().mul(B.duplicate().pow(challenge));
+        if (!check1Lhs.isEqual(check1Rhs))
             return false;
 
-        BigInteger check2Lhs = genData.modPow(response[2], mod).
-            multiply(genVerif.modPow(response[3], mod)).mod(mod);
-        BigInteger check2Rhs = commitments[1].multiply(A.modPow(challenge, mod)).mod(mod);
-        if (check2Lhs.compareTo(check2Rhs) != 0)
+        Element check2Lhs = genData_pp.pow(response[2]).
+            mul(genVerif_pp.pow(response[3]));
+        Element check2Rhs = commitments[1].duplicate().mul(A.duplicate().pow(challenge));
+        if (!check2Lhs.isEqual(check2Rhs))
             return false;
-
-        BigInteger check3Lhs = (B.modPow(response[2], mod).
-                                multiply(genVerif.modPow(response[4], mod))).mod(mod);
-        BigInteger check3Rhs = (commitments[2].multiply(C.modPow(challenge, mod))).mod(mod);
-        if (check3Lhs.compareTo(check3Rhs) != 0)
+				
+        Element check3Lhs = B.duplicate().pow(response[2]).
+						mul(genVerif_pp.pow(response[4]));
+        Element check3Rhs = commitments[2].duplicate().mul(C.duplicate().pow(challenge));
+        if (!check3Lhs.isEqual(check3Rhs))
             return false;
         return true;
     }

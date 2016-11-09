@@ -53,7 +53,9 @@ public class PedersonShare implements Serializable {
         valData = a_valData;
         valVerif = a_valVerif;
         index = a_index;
-        commitments = Arrays.copyOf(a_commitments, a_commitments.length);
+				commitments = new Element[a_commitments.length];
+				for (int i = 0; i < commitments.length; ++i)
+						commitments[i] = a_commitments[i].duplicate();
         threshold = a_threshold;
     }
 
@@ -80,7 +82,7 @@ public class PedersonShare implements Serializable {
      */
     void validate() throws CheatAttemptException {
         Element rhs = genData_pp.pow(valData);
-        rhs.mul(genVerif_pp.pow(valVerif));
+        rhs = rhs.mul(genVerif_pp.pow(valVerif));
         if (!computeMac(index).isEqual(rhs))
             throw new CheatAttemptException("The commitments do not match the given values!");
     }
@@ -117,7 +119,7 @@ public class PedersonShare implements Serializable {
                                                  commitments,
                                                  threshold);
         for (int i = 0; i < commitments.length; ++i)
-            result.commitments[i].mul(other.commitments[i]);
+            result.commitments[i] = result.commitments[i].mul(other.commitments[i]);
         return result;
     }
 
@@ -126,6 +128,7 @@ public class PedersonShare implements Serializable {
      * times the value of this share.
      */
     public PedersonShare constMultiply(BigInteger c) {
+				c = c.mod(modQ);
         PedersonShare result = new PedersonShare(valData.multiply(c).mod(modQ),
                                                  valVerif.multiply(c).mod(modQ),
                                                  index,
@@ -162,7 +165,8 @@ public class PedersonShare implements Serializable {
      * computationally unbounded.<p>
      *
      * <code>val</code> is assumed to be a number in Z_q (ie. an
-     * integer between <code>0</code> and <code>PedersonShare.modQ</code>
+     * integer between <code>0</code> and <code>PedersonShare.modQ -
+     * 1</code>)
      */
     public static PedersonShare[] shareValue(BigInteger val, int threshold, int numShares) {
         BigInteger[] polyData = new BigInteger[threshold];
