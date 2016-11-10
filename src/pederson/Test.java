@@ -21,6 +21,8 @@ import edu.biu.scapi.exceptions.DuplicatePartyException;
 import it.unisa.dia.gas.jpbc.*;
 import it.unisa.dia.gas.plaf.jpbc.pairing.PairingFactory;
 
+import mpcCrypto.PRF;
+
 public class Test {
     public static void main(String[] args) throws IOException{
         if (args.length != 1) {
@@ -114,21 +116,27 @@ public class Test {
         // if (res.intValue() != 241)
         //     throw new RuntimeException("Error in linear operations. Test failed.");
 
-
-
         // Now multiply two values and open share
         PedersonShare mult = PedersonComm.multiply(val1, val2, channels);
         if (PedersonComm.combineShares(mult, channels).intValue() != 210)
             throw new RuntimeException("Error in multiplication. Test Failed.");
 
         // Share a random value and open it
-        PedersonShare randValShare = PedersonComm.shareRandomNumber(3, channels);
+        PedersonShare randValShare = PedersonComm.shareRandomNumber(2, channels);
         BigInteger randVal = PedersonComm.combineShares(randValShare, channels);
-
+				
         // Test plaintext exponentiation
         Element ptExponentiated = PedersonComm.plaintextExponentiate(randValShare, channels);
         if (!ptExponentiated.isEqual(PedersonShare.genData_pp.pow(randVal)))
             throw new RuntimeException("Error in plaintext exponentiation. Result did not match what was expected.");
+
+				// Test PRF computation
+				PedersonShare prfVal = PedersonShare.shareConstValue(new BigInteger("3561345"), 2, 3)[val1.getIndex()-1];
+				PRF prf = new PRF(2, channels);
+				Element prfRes = prf.compute(prfVal);
+				Element prfCheck = PedersonShare.genData_pp.pow(prf.revealKey().add(new BigInteger("3561345")).modInverse(PedersonShare.modQ));
+				if (!prfRes.isEqual(prfCheck))
+						throw new RuntimeException("Error in PRF computation. Computed incorrect value.");
 
         // // Test exponentiation
         // BigInteger exponent = new BigInteger("29743");

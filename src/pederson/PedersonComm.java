@@ -446,13 +446,15 @@ public class PedersonComm {
                 shareSender(shares, channels);
                 if (result == null)
                     result = shares[i];
-                result = result.add(shares[i]);
+								else
+										result = result.add(shares[i]);
             }
             else {
                 PedersonShare received = shareReceiver(i, channels);
                 if (result == null)
                     result = received;
-                result = result.add(received);
+								else
+										result = result.add(received);
             }
         }
 
@@ -518,6 +520,7 @@ public class PedersonComm {
 								exp2s[i] = exp2;
 								continue;
 						}
+						//System.out.println(share.valData.toString());
 						channels[i].send(exp1.toBytes());
 						channels[i].send(exp2.toBytes());
 				}
@@ -545,8 +548,8 @@ public class PedersonComm {
         for (int i = 0; i < exp1s.length; ++i) {
             if (exp1s[i] == null)
                 continue;
-						if (numUsed >= share.threshold)
-								break;
+						// if (numUsed >= share.threshold)
+						// 		break;
 						++numUsed;
 
             BigInteger coeff = BigInteger.ONE;
@@ -558,6 +561,7 @@ public class PedersonComm {
                 coeff = coeff.multiply(BigInteger.valueOf(j)).mod(modQ);
                 coeff = coeff.multiply(BigInteger.valueOf(j - i - 1).modInverse(modQ)).mod(modQ);
             }
+						//System.out.println(i + " " + coeff);
             result.mul(exp1s[i].pow(coeff));
         }
 				if (numUsed < share.threshold)

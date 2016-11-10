@@ -19,7 +19,7 @@ import it.unisa.dia.gas.plaf.jpbc.pairing.PairingFactory;
 public class PedersonShare implements Serializable {
     // Group over which we operate
 		public static Pairing pairing = PairingFactory.getPairing("a.properties");
-		public static Field group = pairing.getG1();
+		public static Field group = pairing.getGT();
     // public static final BigInteger mod = new BigInteger("2698727"); //982451653");
 		public static final BigInteger modQ = group.getOrder(); //mod.subtract(BigInteger.ONE).divide(new BigInteger("2"));
 		
@@ -58,6 +58,10 @@ public class PedersonShare implements Serializable {
 						commitments[i] = a_commitments[i].duplicate();
         threshold = a_threshold;
     }
+
+		public int getIndex() {
+				return index.intValue();
+		}
 
     /**
      * Computes MAC at a given index using commitments.<p>
