@@ -105,7 +105,9 @@ public class Profile {
  * For PRF evaluation
  * - 5 players, 4 cores, 100 PRF computations, type 'a' -> G1 took 5min57s (real time) and 4m10s (user time)
  * - 5 players, 4 cores, 100 PRF computations, type 'a' -> GT took 1min37s (real time) 0m32s (user time) and 86s (in-program measurement)
+ * - 11 players, brain01, 100 PRF computations, type 'a' -> GT took 3m31s (real time) 1m19s (user time) 208s (in-program measurement)
  *
  * For Boneh-Boyen Signatures
  * - 5 Players, 4 cores, 10 signatures, type 'a' -> G1 took 1m10s (real time), 0m48s (user time) and 57s (in-program measurement)
+ * - 11 Players, brain01, 10 signatures, type 'a' -> G1 took 6m27s (real time), 4m37s (user time) and 383s (in-program measurement)
  */

@@ -1,0 +1,65 @@
+Notation:
+ - n Number of players
+ - k Threshold
+
+PedersonShare::computeMac
+ - k group exponentiations
+ - 2k group multiplications
+
+PedersonShare::validate
+ > 1 PedersonShare::computeMac
+ - k+2 group exponentiations
+ - 2k+1 group multiplications
+
+PedersonShare::evaluatePolynomial
+ - k Z_p additions
+ - 2k Z_p multiplications
+
+PedersonShare::add
+ - k group multiplications
+ - 2 Z_p additions
+
+PedersonShare::constMultiply
+ - k group exponentiations
+ - 2 Z_p multiplications
+
+PedersonShare::shareValue
+ > n PedersohShare::evaluatePolynomial
+ - 2k group exponentiations
+ - k group multiplications
+ - 2k Z_p random choices
+ - nk Z_p additions
+ - 2nk Z_p multiplications
+
+
+
+PedersonComm::verifyCommitmentEquality
+ - n-1 send
+ - n-1 recv
+
+PedersonComm::shareSender
+ > PedersonComm::verifyCommitmentEquality
+ - 2(n-1) send
+ - n-1 recv
+
+PedersonComm::shareReceiver
+ > PedersonShare::validate
+ > PedersonComm::verifyCommitmentEquality
+ - k+2 group exponentiations
+ - 2k+1 group multiplications
+ - (n-1) send
+ - (n-1)+1 recv
+
+PedersonComm::shareRandomNumber
+ > 1 PedersonShare::shareValue
+ > 1 PedersonShare::validate
+ > n PedersonShare::add
+ > 1 PedersonComm::shareSender
+ > n-1 PedersonComm::shareReceiver
+ - 2k+((n-1)(k+2)) group exponentiations
+ - k+(2nk)+((n-1)(2k+1)) group multiplications
+ - 2k Z_p random choices
+ - nk+(2n) Z_p additions
+ - 2nk Z_p multiplications
+ - 2(n-1)+(n-1)(n-1) send
+ - (n-1)+(n-1)n recv
