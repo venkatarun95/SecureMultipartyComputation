@@ -3,6 +3,8 @@ Notation:
  - k Threshold
  - Unless otherwise specified, 'group exponentiations' means with preprocessing
 
+============= COMPLEXITY IN TERMS OF NUMBER OF OPERATIONS ============
+
 PedersonShare::computeMac
  - k group exponentiations
  - 2k group multiplications
@@ -192,7 +194,7 @@ PRF::compute
  - (n*n-1)+(n-1)+2(n*n+2n-3) send
  - (n*n-1)+(n-1)+2(n*n+2n-3) recv
 Summary:
- - 3kn+8k++6n+7 group exponentiations
+ - 3kn+8k+6n+7 group exponentiations
  - 8 non-preprocessed group exponentiations
  - 8kn+11k+3n+16 group multiplications
  - 5+4k Z_p random choices
@@ -232,3 +234,48 @@ Summary
  - 1+3k(k-1)/2 Z_p inversions
  - 5*n*n+7*n-12 send
  - 5*n*n+7*n-12 recv
+
+
+
+
+========================== ROUND COMPLEXITY ==========================
+
+PedersonComm::verifyCommitmentEquality
+ - 1 round
+
+PedersonComm::combineShares
+ - 1 round
+ 
+PedersonComm::shareRandomNumber
+ - 1 round
+
+PedersonComm::multiply
+ - Exchange shares (1), commit to coin toss
+ - Exchange ZKP commitments (1)
+ - Open coin toss (1)
+ - Exchange responses (1)
+Summary: 4 rounds
+
+PedersonComm::plaintextExponentiate
+ - 1 round
+ 
+PedersonComm::plaintextBilinearExponentiate
+ - 1 round
+
+PRF::compute
+ > PedersonComm::shareRandomNumber
+ > PedersonComm::multiply
+ > PedersonComm::combineShares
+ > PedersonComm::multiply
+ > PedersonComm::plaintextExponentiate
+ - 1+4+1+4+1=11 rounds
+
+BonehBoyenSignature::compute
+ > PedersonComm::shareRandomNumber
+ > PedersonComm::multiply
+ > PedersonComm::shareRandomNumber
+ > PedersonComm::multiply
+ > PedersonComm::combineShares
+ > PedersonComm::multiply
+ > PedersonCOmm::publicBilinearExponentiate?
+ - 1+4+1+4+1+4=15 rounds
