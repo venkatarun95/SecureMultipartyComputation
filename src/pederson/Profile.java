@@ -77,17 +77,25 @@ public class Profile {
 						}
 				}
 
-				PRF prf = new PRF(3, channels);
-				PedersonShare val = PedersonShare.shareConstValue(BigInteger.valueOf(10), 3, 5)[index];
-				BonehBoyenSign sign = new BonehBoyenSign(3, channels);
-				PedersonShare msg = PedersonShare.shareConstValue(BigInteger.valueOf(10), 3, 5)[index];
+				int threshold = channels.length - channels.length / 2;
+
+				PRF prf = new PRF(threshold, channels);
+				PedersonShare val = PedersonShare.shareConstValue(BigInteger.valueOf(10), threshold, channels.length)[index];
+				BonehBoyenSign sign = new BonehBoyenSign(threshold, channels);
+				PedersonShare msg = PedersonShare.shareConstValue(BigInteger.valueOf(10), threshold, channels.length)[index];
 				
 				long startTime = System.nanoTime();    
 
+				long sumTime = 0, sumTimeSq = 0, numEpochs = 0;
 				for (int i = 0; i < 100; ++i) {
+				    long epochStart = System.nanoTime();
 						Element res = prf.compute(val);
 						if (i % 10 == 0)
 								System.out.println(i);
+						long epochTime = System.nanoTime() - epochStart;
+						sumTime += epochTime;
+						sumTimeSq += epochTime * epochTime;
+						++ numEpochs;
 				}
 
 				// for (int i = 0; i < 10; ++i) {
@@ -95,9 +103,10 @@ public class Profile {
 				// 		if (i % 10 == 0)
 				// 				System.out.println(i);
 				// }
-
+				
 				long estimatedTime = System.nanoTime() - startTime;
-				System.out.println("Time elapsed: " + estimatedTime);
+				System.out.println("Avg. time per operation: " + (1.0 * sumTime / numEpochs));
+				System.out.println("Var. in time per operation: " + (1.0 * sumTimeSq / numEpochs - 1.0 * sumTime * sumTime / (numEpochs * numEpochs)));
 		}
 }
 

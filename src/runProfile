@@ -1,18 +1,24 @@
 #!/bin/bash
 
 classpath=../scapi/assets/Scapi-2.4.jar::../scapi/assets/commons-exec-1.2.jar:../scapi/assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../scapi/assets/activemq-all-5.9.1.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar
-lib_path=../scapi/assets/:/usr/ssl/lib/
-export LD_LIBRARY_PATH=/usr/ssl/lib
+lib_path=../scapi/assets/
+export LD_LIBRARY_PATH=../scapi/assets:/usr/ssl/lib:/local/moreka/anaconda/lib/
 
-time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketParties0.properties &
-time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketParties1.properties &
-time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketParties2.properties &
-time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketParties3.properties &
-time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketParties4.properties &
+time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketProps0 &
+time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketProps1 &
+time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketProps2 &
+time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketProps3 &
+time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketProps4 &
+# time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketProps5 &
+# time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketProps6 &
+# time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketProps7 &
+# time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketProps8 &
+# time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketProps9 &
+# time java -classpath $classpath -Djava.library.path=$lib_path pederson.Profile socketProps10 &
 
 # java -classpath ../scapi/assets/Scapi-2.4.jar::../scapi/assets/commons-exec-1.2.jar:../scapi/assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar pederson.Test socketParties3.properties &
 # java -classpath ../scapi/assets/Scapi-2.4.jar::../scapi/assets/commons-exec-1.2.jar:../scapi/assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar pederson.Test socketParties4.properties &
 
 # Use the followin in the src directory to compile:
 
-# javac -classpath ../scapi/assets/Scapi-2.4.jar::../scapi/assets/commons-exec-1.2.jar:../scapi/assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar */*.java
+# javac -classpath ../scapi/assets/Scapi-2.4.jar::../scapi/assets/commons-exec-1.2.jar:../scapi/assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar pederson/*.java matrix/*.java mpcCrypto/*.java
