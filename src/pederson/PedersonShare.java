@@ -19,15 +19,19 @@ import it.unisa.dia.gas.plaf.jpbc.pairing.PairingFactory;
 public class PedersonShare implements Serializable {
     // Group over which we operate
 		public static Pairing pairing = PairingFactory.getPairing("a.properties");
+    public static Field groupG1 = pairing.getG1();
 		public static Field group = pairing.getGT();
     // public static final BigInteger mod = new BigInteger("2698727"); //982451653");
 		public static final BigInteger modQ = group.getOrder(); //mod.subtract(BigInteger.ONE).divide(new BigInteger("2"));
 		
     // Group generators
-    // public static BigInteger genData = new BigInteger("2");
-    // public static BigInteger genVerif = new BigInteger("4");
-		static public Element genData = group.newElementFromHash(new byte[] {(byte)0x3f, (byte)0x84, (byte)0x8d, (byte)0x67}, 0, 4);
-		static public Element genVerif = group.newElementFromHash(new byte[] {(byte)0x02, (byte)0xf6, (byte)0x19, (byte)0x3b}, 0, 4); 
+    public static Element genDataG1 = groupG1.newElementFromHash(new byte[] {(byte)0x3f, (byte)0x84, (byte)0x8d, (byte)0x67}, 0, 4);
+		public static Element genVerifG1 = groupG1.newElementFromHash(new byte[] {(byte)0x02, (byte)0xf6, (byte)0x19, (byte)0x3b}, 0, 4); 
+		public static Element genData = pairing.pairing(genDataG1, genDataG1);
+		public static Element genVerif = pairing.pairing(genVerifG1, genVerifG1);
+
+		public static ElementPowPreProcessing genDataG1_pp = genDataG1.getElementPowPreProcessing();
+		public static ElementPowPreProcessing genVerifG1_pp = genVerifG1.getElementPowPreProcessing();   
 		public static ElementPowPreProcessing genData_pp = genData.getElementPowPreProcessing();
 		public static ElementPowPreProcessing genVerif_pp = genVerif.getElementPowPreProcessing();
 

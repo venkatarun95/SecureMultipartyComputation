@@ -570,6 +570,76 @@ public class PedersonComm {
 		}
 
     /**
+     * Exponentiate the G1 group of the bilinear pairing to the value
+     * represented by <code>share</code>. Works when sharing is done
+     * with commitments in GT.
+     *
+     * This is useful because operations on GT are often much faster.
+     */
+    public static Element publicBilinearExponentiate(PedersonShare share, Channel[] channels) throws IOException {
+				// Broadcast g^share and h^share
+				Element exp1 = PedersonShare.genDataG1_pp.pow(share.valData);
+				Element exp2 = PedersonShare.genVerifG1_pp.pow(share.valVerif);
+				Element[] exp1s = new Element[channels.length];
+				Element[] exp2s = new Element[channels.length];
+				for (int i = 0; i < channels.length; ++i) {
+						if (channels[i] == null) {
+								exp1s[i] = exp1;
+								exp2s[i] = exp2;
+								continue;
+						}
+						//System.out.println(share.valData.toString());
+						channels[i].send(exp1.toBytes());
+						channels[i].send(exp2.toBytes());
+				}
+
+				// Get other people's 'broadcast's. Note we needn't check if
+				// same value is broadcast to all since we are verifying the
+				// commitment anyway.
+				for (int i = 0; i < channels.length; ++i) {
+						if (channels[i] == null)
+								continue;
+						exp1s[i] = PedersonShare.groupG1.newElementFromBytes((byte[])receive(channels[i]));
+						exp2s[i] = PedersonShare.groupG1.newElementFromBytes((byte[])receive(channels[i]));
+            Element paired1 = PedersonShare.pairing.pairing(exp1s[i], PedersonShare.genDataG1);
+            Element paired2 = PedersonShare.pairing.pairing(exp2s[i], PedersonShare.genVerifG1);
+						Element check = paired1.duplicate().mul(paired2);
+						if (!check.isEqual(share.computeMac(BigInteger.valueOf(i+1)))) {
+								System.err.println("Verification failed for party " + (i+1) + " during plaintext exponentiation.");
+								exp1s[i] = null;
+								exp2s[i] = null;
+						}
+				}
+
+				// Interpolate in the exponent to get the result
+				BigInteger modQ = PedersonShare.modQ;
+				Element result = PedersonShare.groupG1.newElement(1);
+				int numUsed = 0;
+        for (int i = 0; i < exp1s.length; ++i) {
+            if (exp1s[i] == null)
+                continue;
+						// if (numUsed >= share.threshold)
+						// 		break;
+						++numUsed;
+
+            BigInteger coeff = BigInteger.ONE;
+            for (int j = 1; j <= exp1s.length; ++j) {
+                if (j == i + 1)
+                    continue;
+                if (exp1s[j - 1] == null)
+                    continue;
+                coeff = coeff.multiply(BigInteger.valueOf(j)).mod(modQ);
+                coeff = coeff.multiply(BigInteger.valueOf(j - i - 1).modInverse(modQ)).mod(modQ);
+            }
+						//System.out.println(i + " " + coeff);
+            result.mul(exp1s[i].pow(coeff));
+        }
+				if (numUsed < share.threshold)
+						throw new RuntimeException("Did not receive enough correct shares from others to exponentiate.");
+				return result;        
+    }
+
+    /**
      * Computes generator ^ {shared value} (mod PedersonShare.modQ)
      */
     // public static BigInteger plaintextExponentiate(Element generator, PedersonShare share, Channel[] channels) throws IOException, CheatAttemptException {
