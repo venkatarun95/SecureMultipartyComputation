@@ -83,30 +83,47 @@ public class Profile {
 				PedersonShare val = PedersonShare.shareConstValue(BigInteger.valueOf(10), threshold, channels.length)[index];
 				BonehBoyenSign sign = new BonehBoyenSign(threshold, channels);
 				PedersonShare msg = PedersonShare.shareConstValue(BigInteger.valueOf(10), threshold, channels.length)[index];
-				
-				long startTime = System.nanoTime();    
 
-				long sumTime = 0, sumTimeSq = 0, numEpochs = 0;
+
+        // Benchmark PRF computation
+				double sumTime = 0, sumTimeSq = 0, numEpochs = 0;
+        double avg, var;
 				for (int i = 0; i < 100; ++i) {
 				    long epochStart = System.nanoTime();
 						Element res = prf.compute(val);
+						double epochTime = (System.nanoTime() - epochStart)*1e-9;
 						if (i % 10 == 0)
 								System.out.println(i);
-						long epochTime = System.nanoTime() - epochStart;
+
+						sumTime += epochTime;
+						sumTimeSq += epochTime * epochTime;
+						++ numEpochs;
+            //System.out.println(i + " " + epochTime * 1e-9);
+				}
+
+        avg = sumTime / numEpochs;
+        var = sumTimeSq / numEpochs - avg * avg;
+				System.out.println("Avg. time per PRF operation: " + avg);
+				System.out.println("Var. in time per PRF operation: " + var);
+
+        // Benchmark signature computation
+        sumTime = 0; sumTimeSq = 0; numEpochs = 0;
+				for (int i = 0; i < 100; ++i) {
+            long epochStart = System.nanoTime();
+						sign.compute(msg);
+            double epochTime = (System.nanoTime() - epochStart)*1e-9;
+						if (i % 10 == 0)
+								System.out.println(i);
+            
 						sumTime += epochTime;
 						sumTimeSq += epochTime * epochTime;
 						++ numEpochs;
 				}
 
-				// for (int i = 0; i < 10; ++i) {
-				// 		sign.compute(msg);
-				// 		if (i % 10 == 0)
-				// 				System.out.println(i);
-				// }
-				
-				long estimatedTime = System.nanoTime() - startTime;
-				System.out.println("Avg. time per operation: " + (1.0 * sumTime / numEpochs));
-				System.out.println("Var. in time per operation: " + (1.0 * sumTimeSq / numEpochs - 1.0 * sumTime * sumTime / (numEpochs * numEpochs)));
+        avg = sumTime / numEpochs;
+        var = sumTimeSq / numEpochs - avg * avg;
+				System.out.println("Avg. time per signature operation: " + avg);
+				System.out.println("Var. in time per signature operation: " + var);
 		}
 }
 
