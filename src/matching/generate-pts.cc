@@ -58,6 +58,7 @@ bool intersect(const VectorSet& a, const VectorSet& b) {
 	for (const auto& x : a)
 		if (b.count(x))
 			return true;
+	return false;
 }
 
 // Return a random vector in [0, 1]^d.
@@ -168,9 +169,9 @@ int gen_pts(const Vector& center, const double radius, VectorSet& res) {
 
 int gen_pts_d(const Vector& center, const double radius, VectorSet& res) {
 	Vector cur(center);
-	for (int i = 0; i < center.size(); ++i) {
+	for (int i = 0; i < center.size() * 1; ++i) {
 		for (int j = 0; j < cur.size(); ++j)
-			cur[j] += 1.0 + 1.0/center.size();
+			cur[j] += 1e3 + 1.0/center.size();
 		Vector next(cur);
 		for (int j = 0; j < cur.size(); ++j)
 			next[j] = int(cur[j] / radius) * radius;
@@ -184,9 +185,9 @@ int main() {
 	
 	// Individual Tests
 	
-	// int dim = 5;
-	// double radius = 1.0 / 4.0; //1 * dim;
-	// Vector c1(dim, 0.9);
+	// int dim = 100;
+	// double radius = 1.0 / 64.0; //1 * dim;
+	// Vector c1 = rand_vector(dim); //(dim, 0.9);
 	// VectorSet res;
 	// cout << setprecision(4) << gen_pts_d(c1, radius, res) << endl;
 	// for (const auto& x : res)
@@ -206,17 +207,25 @@ int main() {
 
 	// Test accuracy
 
-	int dim = 100;
+	int dim;
+	cin >> dim;
 	double radius = 1.0 / 64.0;
-	Vector a = rand_vector(dim);
-	Vector b = rand_vector(dim);
-	scalar_mult(b, 0.25 * radius / norm(b));
-	cout << norm(b) << " " << norm(a) << endl;
-	add_vec(b, a);
-
-	VectorSet apts, bpts;
-	gen_pts_d(a, radius, apts);
-	gen_pts_d(b, radius, bpts);
-	cout << norm(b) << " " << intersect(apts, bpts) << endl;
+	int num_samples = 1000;
+	for (double factor = 0.1; factor < 1.55; factor += 0.1) {
+		int num_matched = 0;
+		for (int sample = 0; sample < num_samples; ++sample) {
+			Vector a = rand_vector(dim);
+			//scalar_mult(a, 10);
+			Vector b = rand_vector(dim);
+			scalar_mult(b, factor * radius / norm(b));
+			add_vec(b, a);
+			
+			VectorSet apts, bpts;
+			gen_pts_d(a, radius, apts);
+			gen_pts_d(b, radius, bpts);
+			num_matched += intersect(apts, bpts);
+		}
+		cout << factor << " " << 1.0 * num_matched / num_samples << endl;
+	}
   return 0;
 }
