@@ -30,6 +30,7 @@ import mpcCrypto.PRF;
 
 public class Server {
 		static Channel[] channels;
+    static int thisPartyId;
 
 		public static void main(String[] args) {
 				if (args.length != 2)
@@ -72,14 +73,25 @@ public class Server {
 						}
 
 						try {
-								PedersonShare value = (PedersonShare)inStream.readObject();
-								System.out.println("Got value from client");
-								Element[] result = bucket.computeSend(value);
-                byte[][] resBytes = new byte[result.length][];
-                for (int i = 0; i < result.length; ++i)
-                    resBytes[i] = result[i].toBytes();
-                outStream.writeObject(resBytes);
+                outStream.writeObject(thisPartyId);
                 outStream.flush();
+                String action = (String)inStream.readObject();
+                if (!action.equals(new String("Register"))) {
+                    System.err.println("Unrecognized request '" + action +"'.");
+                    //continue;
+                }
+                BigInteger identity = (BigInteger)inStream.readObject();
+                int numTickets = (int)inStream.readObject();
+                for (int i = 0; i < numTickets; ++i) {
+                    PedersonShare value = (PedersonShare)inStream.readObject();
+                    System.out.println("Got value from client");
+                    Element[] result = bucket.computeSend(value);
+                    byte[][] resBytes = new byte[result.length][];
+                    for (int j = 0; j < result.length; ++j)
+                        resBytes[j] = result[j].toBytes();
+                    outStream.writeObject(resBytes);
+                    outStream.flush();
+                }
 						}
 						catch (IOException|ClassNotFoundException e) {
 								System.err.println("Error while communicating with client.\n" + e.getMessage());
@@ -112,7 +124,7 @@ public class Server {
 
 				// Create channels array
 				SocketPartyData thisParty = parties[0];
-				int thisPartyId = -1;
+				thisPartyId = -1;
 				Arrays.sort(parties, new Comparator<SocketPartyData>() {
 								@Override
 								public int compare(SocketPartyData o1, SocketPartyData o2) {
