@@ -1,7 +1,11 @@
 #!/bin/bash
 
-scapi server.Server 8885 socketParties0.properties &
-scapi server.Server 8886 socketParties1.properties &
-scapi server.Server 8887 socketParties2.properties &
-scapi server.Server 8888 socketParties3.properties &
-scapi server.Server 8889 socketParties4.properties &
+classpath=../scapi/assets/Scapi-2.4.jar::../scapi/assets/commons-exec-1.2.jar:../scapi/assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../scapi/assets/activemq-all-5.9.1.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar
+lib_path=../scapi/assets/:/usr/ssl/lib/
+export LD_LIBRARY_PATH=/usr/ssl/lib
+
+java -classpath $classpath -Djava.library.path=$lib_path server.Server 8885 socketProps0 &
+java -classpath $classpath -Djava.library.path=$lib_path server.Server 8886 socketProps1 &
+java -classpath $classpath -Djava.library.path=$lib_path server.Server 8887 socketProps2 &
+java -classpath $classpath -Djava.library.path=$lib_path server.Server 8888 socketProps3 &
+java -classpath $classpath -Djava.library.path=$lib_path server.Server 8889 socketProps4 &
