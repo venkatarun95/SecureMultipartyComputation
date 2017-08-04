@@ -570,6 +570,69 @@ public class PedersonComm {
 		}
 
     /**
+     * For use when parties need to exponentiate their shares, but reveal it
+     * only to a third party.
+     *
+     * @param share Our share of value to be exponentiated.
+     * @numShares Maximun number of parties holding the shares (can be an
+     * overestimate, but should be same for all parties).
+     * @return <code>2 + numShares</code> elements, which should be sent to the third party.
+     */
+    public static Element[] plaintextExponentiateSend(PedersonShare share, int numShares) {
+        Element[] res = new Element[2 + numShares];
+        res[0] = PedersonShare.genData_pp.pow(share.valData);
+        res[1] = PedersonShare.genVerif_pp.pow(share.valVerif);
+        for (int i = 0; i < numShares; ++i) {
+            res[i + 2] = share.computeMac(BigInteger.valueOf(i+1));
+        }
+        return res;
+    }
+
+    /**
+     * For use when parties need to exponentiate their shares, but reveal if
+     * only to a third party.
+     *
+     * @params expShares Array of <code>Element[]</code> returned by
+     * <code>plaintextExponentiateSend</code>. These must be in order
+     * @return Reconstructed value.
+     * TODO (venkat) Make sure that even if everybody does not comply, we can
+     * still reproduce shares.
+     */
+    public static Element plaintextExponentiateRecv(Element[][] expShares, int threshold, int numShares) {
+        if(expShares.length < threshold)
+            throw new RuntimeException("Do not have enough shares to reconstruct exponentiated value.");
+        // Check the commitments
+        for (int i = 0; i < expShares.length; ++i) {
+            // Check whether the MACs everybody sent are identical
+            if (expShares[0].length != expShares[i].length)
+                throw new RuntimeException("Different people have sent different number of MACs.");
+            for (int j = 2; j < expShares[0].length; ++j)
+                if (!expShares[0][j].isEqual(expShares[i][j]))
+                    throw new RuntimeException("Different people have sent different MACs.");
+
+            // Check if the sent values are valid.
+            Element check = expShares[i][0].duplicate().mul(expShares[i][1]);
+            if (!check.isEqual(expShares[0][i+2]))
+                throw new RuntimeException("Verification failed for party " + (i+1) + ".");
+        }
+
+        // Interpolate in the exponent to get the result
+				BigInteger modQ = PedersonShare.modQ;
+				Element result = PedersonShare.group.newElement(1);
+        for (int i = 0; i < threshold; ++i) {
+            BigInteger coeff = BigInteger.ONE;
+            for (int j = 1; j <= numShares; ++j) {
+                if (j == i + 1)
+                    continue;
+                coeff = coeff.multiply(BigInteger.valueOf(j)).mod(modQ);
+                coeff = coeff.multiply(BigInteger.valueOf(j - i - 1).modInverse(modQ)).mod(modQ);
+            }
+            result.mul(expShares[i][0].pow(coeff));
+        }
+				return result;
+    }
+
+    /**
      * Exponentiate the G1 group of the bilinear pairing to the value
      * represented by <code>share</code>. Works when sharing is done
      * with commitments in GT.

@@ -40,17 +40,35 @@ public class PRF {
 				return PedersonComm.combineShares(key, channels);
 		}
 
-		/**
-		 * Compute the PRF of the given secret shared value.
-		 */
-		public Element compute(PedersonShare val) throws IOException {
-				PedersonShare toInvert = key.add(val);
+    private PedersonShare computeExponent(PedersonShare val) throws IOException {
+        PedersonShare toInvert = key.add(val);
 				PedersonShare blind = PedersonComm.shareRandomNumber(threshold, channels);
 				PedersonShare blinded = PedersonComm.multiply(toInvert, blind, channels);
 				BigInteger revealed = PedersonComm.combineShares(blinded, channels);
 				BigInteger blindInverted = revealed.modInverse(PedersonShare.modQ);
 				PedersonShare revealedShare = PedersonShare.shareConstValue(blindInverted, threshold, channels.length)[val.getIndex()-1];
 				PedersonShare inverted = PedersonComm.multiply(revealedShare, blind, channels);
+        return inverted;
+    }
+
+		/**
+		 * Compute the PRF of the given secret shared value.
+		 */
+		public Element compute(PedersonShare val) throws IOException {
+				PedersonShare inverted = computeExponent(val);
 				return PedersonComm.plaintextExponentiate(inverted, channels);
 		}
+
+    /**
+     * Compute the PRF of a given secret shared value such that it is sent to a
+     * third party without being revealed to third parties.
+     *
+     * The returned <code>Element[]</code> should be aggregated in an by the
+     * third party receiver <code>Element[][]</code> and reconstructed using
+     * <code>PedersonComm.plaintextExponentiateRecv</code>.
+     */
+    public Element[] computeSend(PedersonShare val) throws IOException {
+        PedersonShare inverted = computeExponent(val);
+        return PedersonComm.plaintextExponentiateSend(inverted, channels.length);
+    }
 }
