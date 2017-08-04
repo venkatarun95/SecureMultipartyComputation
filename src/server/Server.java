@@ -21,22 +21,22 @@ import edu.biu.scapi.comm.multiPartyComm.SocketMultipartyCommunicationSetup;
 import edu.biu.scapi.comm.twoPartyComm.PartyData;
 import edu.biu.scapi.comm.twoPartyComm.SocketPartyData;
 import edu.biu.scapi.exceptions.DuplicatePartyException;
+import it.unisa.dia.gas.jpbc.*;
 
 import pederson.PedersonShare;
 import pederson.PedersonComm;
 
-import mpcCrypto.SchnorrSignature;
-import mpcCrypto.SchnorrSignatureShare;
+import mpcCrypto.PRF;
 
 public class Server {
 		static Channel[] channels;
-		
+
 		public static void main(String[] args) {
 				if (args.length != 2)
 						System.out.println("Arguments: port player.properties>");
 
 				connectToPeers(args[1]);
-				
+
 				int serverPort = Integer.parseInt(args[0]);
 
 				ServerSocket serverSocket;
@@ -47,7 +47,17 @@ public class Server {
 						System.err.println("Error: Could not bind to port " + serverPort);
 						return;
 				}
-				
+
+        PRF bucket;
+        try {
+            bucket = new PRF(channels.length / 2, channels);
+        }
+        catch (IOException e) {
+            System.err.println("Communication error while setting up bucket.");
+            return;
+        }
+        System.out.println("Server setup complete. Waiting for clients.");
+
 				while (true) {
 						ObjectInputStream inStream;
 						ObjectOutputStream outStream;
@@ -62,22 +72,20 @@ public class Server {
 						}
 
 						try {
-								// outStream.writeObject(new BigInteger("98472"));
-								// outStream.writeObject(new BigInteger("54839"));
-								// outStream.flush();
-								SchnorrSignatureShare sign = (SchnorrSignatureShare)inStream.readObject();
-								System.out.println("Got signature from client");
-								boolean result = SchnorrSignature.verify(sign, channels);
-								if (result)
-										System.out.println("Signature verification succesful!");
-								else
-										System.out.println("Signature verification failed.");
+								PedersonShare value = (PedersonShare)inStream.readObject();
+								System.out.println("Got value from client");
+								Element[] result = bucket.computeSend(value);
+                byte[][] resBytes = new byte[result.length][];
+                for (int i = 0; i < result.length; ++i)
+                    resBytes[i] = result[i].toBytes();
+                outStream.writeObject(resBytes);
+                outStream.flush();
 						}
 						catch (IOException|ClassNotFoundException e) {
 								System.err.println("Error while communicating with client.\n" + e.getMessage());
 						}
-						
-						break;
+
+						//break;
 				}
 		}
 
@@ -86,13 +94,13 @@ public class Server {
 				LoadSocketParties loadParties = new LoadSocketParties(propertiesFileName);
 				List<PartyData> partiesList = loadParties.getPartiesList();
 				SocketPartyData[] parties = partiesList.toArray(new SocketPartyData[0]);
-				
+
 				SocketMultipartyCommunicationSetup commSetup = new SocketMultipartyCommunicationSetup(partiesList);
 				long timeoutInMs = 60000;  //The maximum amount of time we are willing to wait to set a connection.
 				HashMap<PartyData, Object> connectionsPerParty = new HashMap<PartyData, Object>();
 				for (int i = 1; i < parties.length; ++i)
 						connectionsPerParty.put(parties[i], 2);
-				
+
 				Map<PartyData, Map<String, Channel>> connections;
 				try {
 				    connections = commSetup.prepareForCommunication(connectionsPerParty, timeoutInMs);
@@ -119,6 +127,6 @@ public class Server {
 								continue;
 						}
 						channels[i] = connections.get(parties[i]).values().iterator().next();
-				}				
+				}
 		}
 }

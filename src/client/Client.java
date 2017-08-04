@@ -7,13 +7,15 @@ import java.net.Socket;
 
 import java.math.BigInteger;
 
-import mpcCrypto.SchnorrSignature;
-import mpcCrypto.SchnorrSignatureShare;
+import it.unisa.dia.gas.jpbc.*;
+
+import pederson.PedersonShare;
+import pederson.PedersonComm;
 
 public class Client {
-		public static void main(String[] args) {
-				if (args.length != 3) {
-						System.out.println("Arguments: [serverIp:port::...] secret pubKey");
+    public static void main(String[] args) {
+				if (args.length != 1) {
+						System.out.println("Arguments: [serverIp:port::...]");
 						return;
 				}
 				String[] addresses = args[0].split("::");
@@ -26,31 +28,44 @@ public class Client {
 
 				Socket[] serverSockets = new Socket[addresses.length];
 
-				// Prepare the signature shares
-				SchnorrSignatureShare[] signatureShares = SchnorrSignature.sign(BigInteger.valueOf(10),
-												BigInteger.valueOf(878),
-												true, 2, 5);
-				
 				ObjectInputStream[] inStreams = new ObjectInputStream[addresses.length];
 				ObjectOutputStream[] outStreams = new ObjectOutputStream[addresses.length];
 				for (int i = 0; i < addresses.length; ++i) {
 						try {
+                System.out.println("Connecting to " + serverIps[i] + " " + serverPorts[i]);
 								serverSockets[i] = new Socket(serverIps[i], serverPorts[i]);
 								outStreams[i] = new ObjectOutputStream(serverSockets[i].getOutputStream());
 								inStreams[i] = new ObjectInputStream(serverSockets[i].getInputStream());
 						}
 						catch (Exception e) { // TODO: be more specific
-								System.err.println("Error while establishing connection with server.");
+								System.err.println("Error while establishing connection with server. " + e.getMessage());
 								return;
 						}
-				
-						try {
-								outStreams[i].writeObject(signatureShares[i]);
+        }
+
+        try {
+            PedersonShare[] shares = PedersonShare.shareValue(BigInteger.valueOf(10), addresses.length / 2, addresses.length);
+            // Send shares
+            for (int i = 0; i < addresses.length; ++i) {
+								outStreams[i].writeObject(shares[i]);
 								outStreams[i].flush();
 						}
-						catch (IOException e) {
-								System.err.println("Error while communicating with server.\n" + e.getMessage());
-						}
+
+            // Receive exponentiated shares
+            Element[][] expShares = new Element[addresses.length][];
+            for (int i = 0; i < addresses.length; ++i) {
+                byte[][] expShareBytes = (byte[][])inStreams[i].readObject();
+                expShares[i] = new Element[expShareBytes.length];
+                for (int j = 0; j < expShareBytes.length; ++j) {
+                    expShares[i][j] = PedersonShare.group.newOneElement();
+                    expShares[i][j].setFromBytes(expShareBytes[j]);
+                }
+
+            }
+            PedersonComm.plaintextExponentiateRecv(expShares, addresses.length / 2, addresses.length);
 				}
+        catch (IOException|ClassNotFoundException e) {
+            System.err.println("Error while communicating with server.\n" + e.getMessage());
+        }
 		}
 }
