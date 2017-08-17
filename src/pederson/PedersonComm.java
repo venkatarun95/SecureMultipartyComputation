@@ -520,7 +520,6 @@ public class PedersonComm {
 								exp2s[i] = exp2;
 								continue;
 						}
-						//System.out.println(share.valData.toString());
 						channels[i].send(exp1.toBytes());
 						channels[i].send(exp2.toBytes());
 				}
@@ -542,31 +541,7 @@ public class PedersonComm {
 				}
 
 				// Interpolate in the exponent to get the result
-				BigInteger modQ = PedersonShare.modQ;
-				Element result = PedersonShare.group.newElement(1);
-				int numUsed = 0;
-        for (int i = 0; i < exp1s.length; ++i) {
-            if (exp1s[i] == null)
-                continue;
-						// if (numUsed >= share.threshold)
-						// 		break;
-						++numUsed;
-
-            BigInteger coeff = BigInteger.ONE;
-            for (int j = 1; j <= exp1s.length; ++j) {
-                if (j == i + 1)
-                    continue;
-                if (exp1s[j - 1] == null)
-                    continue;
-                coeff = coeff.multiply(BigInteger.valueOf(j)).mod(modQ);
-                coeff = coeff.multiply(BigInteger.valueOf(j - i - 1).modInverse(modQ)).mod(modQ);
-            }
-						//System.out.println(i + " " + coeff);
-            result.mul(exp1s[i].pow(coeff));
-        }
-				if (numUsed < share.threshold)
-						throw new RuntimeException("Did not receive enough correct shares from others to exponentiate.");
-				return result;
+        return reconstructExponentiatedShares(exp1s, share.threshold, channels.length);
 		}
 
     /**
@@ -617,19 +592,11 @@ public class PedersonComm {
         }
 
         // Interpolate in the exponent to get the result
-				BigInteger modQ = PedersonShare.modQ;
-				Element result = PedersonShare.group.newElement(1);
-        for (int i = 0; i < threshold; ++i) {
-            BigInteger coeff = BigInteger.ONE;
-            for (int j = 1; j <= numShares; ++j) {
-                if (j == i + 1)
-                    continue;
-                coeff = coeff.multiply(BigInteger.valueOf(j)).mod(modQ);
-                coeff = coeff.multiply(BigInteger.valueOf(j - i - 1).modInverse(modQ)).mod(modQ);
-            }
-            result.mul(expShares[i][0].pow(coeff));
+        Element[] shares = new Element[expShares.length];
+        for (int i = 0; i < expShares.length; ++i) {
+            shares[i] = expShares[i][0];
         }
-				return result;
+        return reconstructExponentiatedShares(shares, threshold, numShares);
     }
 
     /**
