@@ -76,28 +76,43 @@ public class Server {
                 outStream.writeObject(thisPartyId);
                 outStream.flush();
                 String action = (String)inStream.readObject();
-                if (!action.equals(new String("Register"))) {
-                    System.err.println("Unrecognized request '" + action +"'.");
-                    //continue;
+                if (action.equals("Register")) {
+                    BigInteger identity = (BigInteger)inStream.readObject();
+                    int numTickets = (int)inStream.readObject();
+                    for (int i = 0; i < numTickets; ++i) {
+                        PedersonShare value = (PedersonShare)inStream.readObject();
+                        System.out.println("Got value from client");
+                        Element[] result = bucket.computeSend(value);
+                        byte[][] resBytes = new byte[result.length][];
+                        for (int j = 0; j < result.length; ++j)
+                            resBytes[j] = result[j].toBytes();
+                        outStream.writeObject(resBytes);
+                        outStream.flush();
+
+                        Element auxResult = bucket.compute(value);
+                    }
                 }
-                BigInteger identity = (BigInteger)inStream.readObject();
-                int numTickets = (int)inStream.readObject();
-                for (int i = 0; i < numTickets; ++i) {
-                    PedersonShare value = (PedersonShare)inStream.readObject();
-                    System.out.println("Got value from client");
-                    Element[] result = bucket.computeSend(value);
-                    byte[][] resBytes = new byte[result.length][];
-                    for (int j = 0; j < result.length; ++j)
-                        resBytes[j] = result[j].toBytes();
-                    outStream.writeObject(resBytes);
+                else if(action.equals("Allege")) {
+                    PedersonShare ticketShare = (PedersonShare)inStream.readObject();
+                    Element claimedMac = PedersonShare.group.newOneElement();
+                    claimedMac.setFromBytes((byte[])inStream.readObject());
+                    int revealThreshold = (int)inStream.readObject();
+
+                    Element mac = bucket.compute(ticketShare);
+                    if (mac.isEqual(claimedMac))
+                        outStream.writeObject(true);
+                    else
+                        outStream.writeObject(false);
                     outStream.flush();
                 }
-						}
+                else {
+                    System.err.println("Unrecognized command '" + action +"'.");
+                    continue;
+                }
+            }
 						catch (IOException|ClassNotFoundException e) {
 								System.err.println("Error while communicating with client.\n" + e.getMessage());
 						}
-
-						//break;
 				}
 		}
 

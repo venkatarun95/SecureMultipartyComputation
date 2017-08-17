@@ -1,12 +1,10 @@
 package client;
 
-import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.io.ObjectInputStream;
+import java.io.*;
+import java.math.BigInteger;
 import java.net.Socket;
 import java.security.SecureRandom;
-
-import java.math.BigInteger;
+import java.util.Arrays;
 
 import it.unisa.dia.gas.jpbc.*;
 
@@ -21,17 +19,52 @@ public class Client {
     private static ObjectOutputStream[] outStreams;
     private static int numServers;
 
+    private static class IdentityFile implements Serializable {
+        // An integer representing strong identity of the accuser
+        public BigInteger identity;
+        // Tickets and corresponding macs used to blindly prove identity to
+        // escrows
+        public BigInteger[] tickets;
+        public byte[][] macs;
+        // Indicates (tickets[i], macs[i]) has been used for i < numUsed
+        public int numUsed;
+
+        public void setMacs(Element[] eMacs) {
+            assert(eMacs.length == tickets.length);
+            macs = new byte[eMacs.length][];
+            for (int i = 0; i < eMacs.length; ++i)
+                macs[i] = eMacs[i].toBytes();
+        }
+
+        public Element[] getMacs() {
+            assert(macs.length == tickets.length);
+            Element[] res = new Element[macs.length];
+            for (int i = 0; i < macs.length; ++i) {
+                res[i] = PedersonShare.group.newOneElement();
+                res[i].setFromBytes(macs[i]);
+            }
+            return res;
+        }
+    }
+
     public static void main(String[] args) {
-				if (args.length != 1) {
-						System.out.println("Arguments: [serverIp:port::...]");
+				if (args.length != 3) {
+						System.out.println("Arguments: [serverIp:port::...] register|file identity_file");
 						return;
 				}
+        if (!args[1].equals("register") && !args[1].equals("file")) {
+            System.err.println("Unrecognized command '" + args[1] + "'. Command must be 'register' or 'file'.");
+            return;
+        }
 
         connectToServers(args[0]);
         System.out.println("Connected to servers.");
 
         try {
-            register(5);
+            if (args[1].equals("register"))
+                register(5, args[2]);
+            else
+                fileAllegation(BigInteger.valueOf(10), 5, args[2]);
 				}
         catch (IOException|ClassNotFoundException e) {
             System.err.println("Error while communicating with server.\n" + e.getMessage());
@@ -64,7 +97,7 @@ public class Client {
         numServers = addresses.length;
     }
 
-    private static void register(int numTickets) throws IOException,ClassNotFoundException {
+    private static void register(int numTickets, String identityFilename) throws IOException,ClassNotFoundException {
         // Choose our identity
         BigInteger identity = new BigInteger(64, random);
 
@@ -77,32 +110,73 @@ public class Client {
         }
 
         // Send to servers
+        int[] serverIndices = new int[numServers];
         for (int i = 0; i < numServers; ++i) {
-            int serverIndex = (int)inStreams[i].readObject();
-            System.out.println(serverIndex);
+            serverIndices[i] = (int)inStreams[i].readObject();
             outStreams[i].writeObject(new String("Register"));
             outStreams[i].writeObject(identity);
             outStreams[i].writeObject(numTickets);
             for (int j = 0; j < numTickets; ++j)
-                outStreams[i].writeObject(ticketsShares[j][serverIndex]);
+                outStreams[i].writeObject(ticketsShares[j][serverIndices[i]]);
             outStreams[i].flush();
         }
 
         // Receive MACs from servers
-        byte[][] ticketMacs = new byte[numTickets][];
+        Element[] macs = new Element[numTickets];
         for (int t = 0; t < numTickets; ++t) {
             // Receive exponentiated shares
             Element[][] expShares = new Element[numServers][];
             for (int i = 0; i < numServers; ++i) {
                 byte[][] expShareBytes = (byte[][])inStreams[i].readObject();
-                expShares[i] = new Element[expShareBytes.length];
+                expShares[serverIndices[i]] = new Element[expShareBytes.length];
                 for (int j = 0; j < expShareBytes.length; ++j) {
-                    expShares[i][j] = PedersonShare.group.newOneElement();
-                    expShares[i][j].setFromBytes(expShareBytes[j]);
+                    expShares[serverIndices[i]][j] = PedersonShare.group.newOneElement();
+                    expShares[serverIndices[i]][j].setFromBytes(expShareBytes[j]);
                 }
             }
-            Element mac = PedersonComm.plaintextExponentiateRecv(expShares, numServers / 2, numServers);
-            ticketMacs[t] = mac.toBytes();
+            macs[t] = PedersonComm.plaintextExponentiateRecv(expShares, numServers / 2, numServers);
         }
+
+        // Write to file
+        IdentityFile file = new IdentityFile();
+        file.identity = identity;
+        file.tickets = tickets;
+        file.setMacs(macs);
+        file.numUsed = 0;
+        FileOutputStream outStream = new FileOutputStream(identityFilename);
+        ObjectOutput outObjStream = new ObjectOutputStream(outStream);
+        outObjStream.writeObject(file);
+        outStream.close();
+}
+
+    private static void fileAllegation(BigInteger metaData, int revealThreshold, String identityFilename) throws IOException, ClassNotFoundException {
+        FileInputStream inStream = new FileInputStream(identityFilename);
+        ObjectInput inObjStream = new ObjectInputStream(inStream);
+        IdentityFile file = (IdentityFile)inObjStream.readObject();
+
+        PedersonShare[] shares = PedersonShare.shareValue(file.tickets[file.numUsed],
+                                                          numServers/2,
+                                                          numServers);
+        // Send to servers
+        for (int i = 0; i < numServers; ++i) {
+            int serverIndex = (int)inStreams[i].readObject();
+            outStreams[i].writeObject(new String("Allege"));
+            outStreams[i].writeObject(shares[serverIndex]);
+            outStreams[i].writeObject(file.macs[file.numUsed]);
+            outStreams[i].writeObject(revealThreshold);
+            outStreams[i].flush();
+            // TODO(venkat): update numUsed
+        }
+
+        // Receive from servers
+        boolean identityApproved = true;
+        for (int i = 0; i < numServers; ++i) {
+            identityApproved = identityApproved && (boolean)inStreams[i].readObject();
+        }
+        if (identityApproved)
+            System.out.println("Identity approved.");
+        else
+            System.out.println("Identity not approved.");
+
     }
 }
