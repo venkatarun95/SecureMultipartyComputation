@@ -5,7 +5,7 @@ import java.io.ObjectOutputStream;
 import java.io.ObjectInputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
-
+import java.sql.*;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -30,13 +30,31 @@ import mpcCrypto.PRF;
 
 public class Server {
 		static Channel[] channels;
+    // A fixed id assigned to each escrow. Important for proper MPC functioning
+    //
+    // It is initially set by an ordering on IP address and port number. After
+    // setup it is permanently stored in a database.
     static int thisPartyId;
 
-		public static void main(String[] args) {
-				if (args.length != 2)
-						System.out.println("Arguments: port player.properties>");
+    // Database variables
+    static Connection dbConnect;
+    static Statement dbStatement;
 
-				connectToPeers(args[1]);
+		public static void main(String[] args) {
+				if (args.length != 4) {
+						System.out.println("Arguments: port player.properties mysqlPath dbname");
+            return;
+        }
+
+        connectToPeers(args[1]);
+
+        try {
+            connectToDB(args[2], args[3]);
+        }
+        catch(Exception e) {
+            System.out.println("Error connecting to database. " + e.getMessage());
+            return;
+        }
 
 				int serverPort = Integer.parseInt(args[0]);
 
@@ -156,4 +174,50 @@ public class Server {
 						channels[i] = connections.get(parties[i]).values().iterator().next();
 				}
 		}
+
+    public static void connectToDB(String address, String dbname) throws Exception {
+        //Class.forName("com.mysql.jdbc.Driver");
+        dbConnect = DriverManager.getConnection(address);
+        dbStatement = dbConnect.createStatement();
+
+        // Use database if present. Else create
+        ResultSet databases = dbStatement.executeQuery("SHOW DATABASES");
+        boolean databaseExists = false;
+        while (databases.next()) {
+            if(databases.getString("Database").equals(dbname)) {
+                databaseExists = true;
+                break;
+            }
+        }
+        if (!databaseExists)
+            dbStatement.executeUpdate("CREATE DATABASE " + dbname);
+        dbStatement.executeUpdate("USE " + dbname);
+        databases.close();
+
+        // If config table doesn't exist, create it. Else read configs
+        ResultSet tables = dbStatement.executeQuery("SHOW TABLES");
+        boolean configTableExists = false;
+        while (tables.next()) {
+            if (tables.getString("Tables_in_" + dbname).equals("Config")) {
+                configTableExists = true;
+                ResultSet configTable = dbStatement.executeQuery("SELECT name, intVal FROM Config");
+                thisPartyId = -1; // Not going to use IP/port based assignment.
+                System.out.println("Reading configs from database");
+                while (configTable.next()) {
+                    if (configTable.getString("name").equals("thisPartyId"))
+                        thisPartyId = configTable.getInt("intVal");
+                    else
+                        System.err.println("Unrecognized config row '" + configTable.getString("name"));
+                }
+                if (thisPartyId == -1)
+                    throw new RuntimeException("Could not load 'thisPartyId' from config table.");
+                break;
+            }
+        }
+        if (!configTableExists) {
+            System.out.println("Initializing database with config table");
+            dbStatement.executeUpdate("CREATE TABLE Config(name CHAR(20) PRIMARY KEY, intVal INT)");
+            dbStatement.executeUpdate("INSERT INTO Config(name, intVal) VALUES('thisPartyId', " + thisPartyId + ")");
+        }
+    }
 }
