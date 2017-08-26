@@ -1,6 +1,7 @@
 package mpcCrypto;
 
 import java.io.IOException;
+import java.io.Serializable;
 import java.math.BigInteger;
 import java.security.SecureRandom;
 
@@ -18,15 +19,12 @@ import pederson.PedersonComm;
  * q-DBDHI (q-Decisional Bilinear Diffie Hellman Inversion)
  * assumption.
  */
-public class PRF {
+public class PRF implements Serializable {
 		PedersonShare key;
 		int threshold;
-		Channel[] channels;
 
-		public PRF(int a_threshold, Channel[] a_channels) throws IOException {
+		public PRF(int a_threshold, Channel[] channels) throws IOException {
 				threshold = a_threshold;
-				channels = a_channels;
-
 				key = PedersonComm.shareRandomNumber(threshold, channels);
 		}
 
@@ -36,11 +34,11 @@ public class PRF {
 		 * Use very carefully. Revealing key will compromize all values
 		 * whose PRF has been computed.
 		 */
-		public BigInteger revealKey() throws IOException {
+		public BigInteger revealKey(Channel[] channels) throws IOException {
 				return PedersonComm.combineShares(key, channels);
 		}
 
-    private PedersonShare computeExponent(PedersonShare val) throws IOException {
+    private PedersonShare computeExponent(PedersonShare val, Channel[] channels) throws IOException {
         PedersonShare toInvert = key.add(val);
 				PedersonShare blind = PedersonComm.shareRandomNumber(threshold, channels);
 				PedersonShare blinded = PedersonComm.multiply(toInvert, blind, channels);
@@ -54,8 +52,8 @@ public class PRF {
 		/**
 		 * Compute the PRF of the given secret shared value.
 		 */
-		public Element compute(PedersonShare val) throws IOException {
-				PedersonShare inverted = computeExponent(val);
+		public Element compute(PedersonShare val, Channel[] channels) throws IOException {
+				PedersonShare inverted = computeExponent(val, channels);
 				return PedersonComm.plaintextExponentiate(inverted, channels);
 		}
 
@@ -67,8 +65,8 @@ public class PRF {
      * third party receiver <code>Element[][]</code> and reconstructed using
      * <code>PedersonComm.plaintextExponentiateRecv</code>.
      */
-    public Element[] computeSend(PedersonShare val) throws IOException {
-        PedersonShare inverted = computeExponent(val);
+    public Element[] computeSend(PedersonShare val, Channel[] channels) throws IOException {
+        PedersonShare inverted = computeExponent(val, channels);
         return PedersonComm.plaintextExponentiateSend(inverted, channels.length);
     }
 }

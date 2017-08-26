@@ -90,7 +90,7 @@ public class Profile {
         double avg, var;
 				for (int i = 0; i < 100; ++i) {
 				    long epochStart = System.nanoTime();
-						Element res = prf.compute(val);
+						Element res = prf.compute(val, channels);
 						double epochTime = (System.nanoTime() - epochStart)*1e-9;
 						if (i % 10 == 0)
 								System.out.println(i);

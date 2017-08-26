@@ -124,7 +124,7 @@ public class Test {
         // Share a random value and open it
         PedersonShare randValShare = PedersonComm.shareRandomNumber(2, channels);
         BigInteger randVal = PedersonComm.combineShares(randValShare, channels);
-				
+
         // Test plaintext exponentiation
         Element ptExponentiated = PedersonComm.plaintextExponentiate(randValShare, channels);
         if (!ptExponentiated.isEqual(PedersonShare.genData_pp.pow(randVal)))
@@ -133,8 +133,8 @@ public class Test {
 				// Test PRF computation
 				PedersonShare prfVal = PedersonShare.shareConstValue(new BigInteger("3561345"), 2, 3)[val1.getIndex()-1];
 				PRF prf = new PRF(2, channels);
-				Element prfRes = prf.compute(prfVal);
-				Element prfCheck = PedersonShare.genData_pp.pow(prf.revealKey().add(new BigInteger("3561345")).modInverse(PedersonShare.modQ));
+				Element prfRes = prf.compute(prfVal, channels);
+				Element prfCheck = PedersonShare.genData_pp.pow(prf.revealKey(channels).add(new BigInteger("3561345")).modInverse(PedersonShare.modQ));
 				if (!prfRes.isEqual(prfCheck))
 						throw new RuntimeException("Error in PRF computation. Computed incorrect value.");
 
