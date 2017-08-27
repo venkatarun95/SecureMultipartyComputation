@@ -1,16 +1,11 @@
 package server;
 
 import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.io.ObjectInputStream;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.sql.*;
-import java.util.Arrays;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeoutException;
 
 import java.math.BigInteger;
@@ -40,6 +35,10 @@ public class Server {
     static Connection dbConnect;
     static Statement dbStatement;
 
+    // Crypto variables
+    static PRF idMacPRF;
+    static PRF idRevealPRF;
+
 		public static void main(String[] args) {
 				if (args.length != 4) {
 						System.out.println("Arguments: port player.properties mysqlPath dbname");
@@ -67,14 +66,6 @@ public class Server {
 						return;
 				}
 
-        PRF bucket;
-        try {
-            bucket = new PRF(channels.length / 2, channels);
-        }
-        catch (IOException e) {
-            System.err.println("Communication error while setting up bucket.");
-            return;
-        }
         System.out.println("Server setup complete. Waiting for clients.");
 
 				while (true) {
@@ -100,14 +91,17 @@ public class Server {
                     for (int i = 0; i < numTickets; ++i) {
                         PedersonShare value = (PedersonShare)inStream.readObject();
                         System.out.println("Got value from client");
-                        Element[] result = bucket.computeSend(value);
+                        Element[] result = idMacPRF.computeSend(value, channels);
                         byte[][] resBytes = new byte[result.length][];
                         for (int j = 0; j < result.length; ++j)
                             resBytes[j] = result[j].toBytes();
                         outStream.writeObject(resBytes);
                         outStream.flush();
 
-                        Element auxResult = bucket.compute(value);
+                        Element reveal = idRevealPRF.compute(value, channels);
+                        dbStatement.executeUpdate("INSERT INTO Identities(identity, revealKey) VALUES('"
+                                                  + encodeToBase64(identity) + "', '"
+                                                  + encodeToBase64(reveal.toBytes()) + "')");
                     }
                 }
                 else if(action.equals("Allege")) {
@@ -116,7 +110,8 @@ public class Server {
                     claimedMac.setFromBytes((byte[])inStream.readObject());
                     int revealThreshold = (int)inStream.readObject();
 
-                    Element mac = bucket.compute(ticketShare);
+                    PRF bucket = getBucket(revealThreshold);
+                    Element mac = idMacPRF.compute(ticketShare, channels);
                     if (mac.isEqual(claimedMac))
                         outStream.writeObject(true);
                     else
@@ -128,13 +123,59 @@ public class Server {
                     continue;
                 }
             }
-						catch (IOException|ClassNotFoundException e) {
+						catch (IOException|ClassNotFoundException|SQLException e) {
 								System.err.println("Error while communicating with client.\n" + e.getMessage());
 						}
 				}
 		}
 
-		public static void connectToPeers(String propertiesFileName) {
+    /**
+     * Returns a PRF object corresponding to bucket with given threshold.
+     *
+     * Loads bucket from the database if available, else creates a new one.
+     *
+     * Warning: The current implementation doesn't use MySQL transactions, so it
+     * is possible for two threads to independently create the same bucket.
+     */
+    private static PRF getBucket(int threshold) throws SQLException,IOException,ClassNotFoundException {
+        PRF result;
+        ResultSet buckets = dbStatement.executeQuery("SELECT prf FROM Buckets WHERE threshold=" + threshold);
+        if (!buckets.first()) {
+            // Create bucket
+            result = new PRF(channels.length / 2, channels);
+            dbStatement.executeUpdate("INSERT INTO Buckets(threshold, prf) VALUES(" + threshold + ", '" + encodeToBase64(result) + "')");
+        }
+        else
+            // Read bucket from DB
+            result = (PRF)decodeFromBase64(buckets.getString("prf"));
+        return result;
+    }
+
+    private static Object decodeFromBase64(String str) throws IOException,ClassNotFoundException {
+        byte[] data = Base64.getDecoder().decode(str);
+        ObjectInputStream ois = new ObjectInputStream(new ByteArrayInputStream(data));
+        Object result = ois.readObject();
+        ois.close();
+        return result;
+    }
+
+    private static String encodeToBase64(Object obj) throws IOException {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ObjectOutputStream oos = new ObjectOutputStream(baos);
+        try {
+            oos.writeObject(obj);
+        }
+        catch (Exception e) {
+            throw new RuntimeException("Could not serialize object. " + e.getMessage());
+        }
+        oos.close();
+        return Base64.getEncoder().encodeToString(baos.toByteArray());
+    }
+
+    /** Load properties file and connect to specified peers. Populates
+     * <code>channels</code>.
+     */
+		private static void connectToPeers(String propertiesFileName) {
 				// Setup communication
 				LoadSocketParties loadParties = new LoadSocketParties(propertiesFileName);
 				List<PartyData> partiesList = loadParties.getPartiesList();
@@ -175,7 +216,11 @@ public class Server {
 				}
 		}
 
-    public static void connectToDB(String address, String dbname) throws Exception {
+    /**
+     * Connects to MySQL database. If not already present, creates database and
+     * some tables which are populated with appropriate initial values.
+     */
+    private static void connectToDB(String address, String dbname) throws SQLException,IOException,ClassNotFoundException {
         //Class.forName("com.mysql.jdbc.Driver");
         dbConnect = DriverManager.getConnection(address);
         dbStatement = dbConnect.createStatement();
@@ -200,12 +245,18 @@ public class Server {
         while (tables.next()) {
             if (tables.getString("Tables_in_" + dbname).equals("Config")) {
                 configTableExists = true;
-                ResultSet configTable = dbStatement.executeQuery("SELECT name, intVal FROM Config");
-                thisPartyId = -1; // Not going to use IP/port based assignment.
+                ResultSet configTable = dbStatement.executeQuery("SELECT name, intVal, charVal FROM Config");
+                thisPartyId = -1;
+                idMacPRF = idRevealPRF = null;
+
                 System.out.println("Reading configs from database");
                 while (configTable.next()) {
                     if (configTable.getString("name").equals("thisPartyId"))
                         thisPartyId = configTable.getInt("intVal");
+                    else if (configTable.getString("name").equals("idMacPRF"))
+                        idMacPRF = (PRF)decodeFromBase64(configTable.getString("charVal"));
+                    else if (configTable.getString("name").equals("idRevealPRF"))
+                        idRevealPRF = (PRF)decodeFromBase64(configTable.getString("charVal"));
                     else
                         System.err.println("Unrecognized config row '" + configTable.getString("name"));
                 }
@@ -215,9 +266,17 @@ public class Server {
             }
         }
         if (!configTableExists) {
-            System.out.println("Initializing database with config table");
-            dbStatement.executeUpdate("CREATE TABLE Config(name CHAR(20) PRIMARY KEY, intVal INT)");
-            dbStatement.executeUpdate("INSERT INTO Config(name, intVal) VALUES('thisPartyId', " + thisPartyId + ")");
+            System.out.println("Initializing database");
+            idMacPRF = new PRF(channels.length / 2, channels);
+            idRevealPRF = new PRF(channels.length / 2, channels);
+
+            dbStatement.executeUpdate("CREATE TABLE Config(name CHAR(20) PRIMARY KEY, intVal INT, charVal VARCHAR(4000))");
+            dbStatement.executeUpdate("INSERT INTO Config(name, intVal) VALUES('thisPartyId', '" + thisPartyId + "')");
+            dbStatement.executeUpdate("INSERT INTO Config(name, charVal) VALUES('idMacPRF', '" + encodeToBase64(idMacPRF) + "')");
+            dbStatement.executeUpdate("INSERT INTO Config(name, charVal) VALUES('idRevealPRF', '" + encodeToBase64(idRevealPRF) + "')");
+
+            dbStatement.executeUpdate("CREATE TABLE Buckets(threshold INT PRIMARY KEY, prf VARCHAR(4000))");
+            dbStatement.executeUpdate("CREATE TABLE Identities(identity VARCHAR(4000), revealKey VARCHAR(4000))");
         }
     }
 }
