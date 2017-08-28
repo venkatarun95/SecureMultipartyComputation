@@ -108,15 +108,76 @@ public class Server {
                     PedersonShare ticketShare = (PedersonShare)inStream.readObject();
                     Element claimedMac = PedersonShare.group.newOneElement();
                     claimedMac.setFromBytes((byte[])inStream.readObject());
+                    PedersonShare metaDataShare = (PedersonShare)inStream.readObject();
                     int revealThreshold = (int)inStream.readObject();
 
-                    PRF bucket = getBucket(revealThreshold);
+                    // Calculate mac and verify claimedMac is correct
                     Element mac = idMacPRF.compute(ticketShare, channels);
-                    if (mac.isEqual(claimedMac))
-                        outStream.writeObject(true);
-                    else
-                        outStream.writeObject(false);
+                    boolean identityVerified = mac.isEqual(claimedMac);
+
+                    // Verify that this ticket hasn't been used before
+                    ResultSet numMatchingTickets = dbStatement.executeQuery("SELECT count(identifier) FROM Allegations WHERE identifier='"
+                                                                            + encodeToBase64(mac.toBytes()) + "'");
+                    numMatchingTickets.next();
+                    if (numMatchingTickets.getInt("count(identifier)") > 0) {
+                        identityVerified = false;
+                        System.out.println("Client tried to re-use tickets.");
+                    }
+
+                    // Send result of verification to client
+                    outStream.writeObject(identityVerified);
                     outStream.flush();
+                    if (!identityVerified)
+                        continue;
+
+                    // Do the bucketing
+                    PRF bucket = getBucket(revealThreshold);
+                    Element prf = bucket.compute(metaDataShare, channels);
+                    ResultSet matching = dbStatement.executeQuery("SELECT identifier FROM Allegations WHERE prf='"
+                                                                  + encodeToBase64(prf.toBytes())
+                                                                  + "' AND bucket=" + (revealThreshold-1));
+                    dbStatement.executeUpdate("INSERT INTO Allegations(identifier, bucket, prf, threshold) VALUES('"
+                                              + encodeToBase64(mac.toBytes())
+                                              + "', '" + encodeToBase64(prf.toBytes())
+                                              + "', " + (revealThreshold-1)
+                                              + ", " + revealThreshold + ")");
+                    if (!matching.first())
+                        continue; // No matches. Bucketing algorithm ends
+
+                    // Navigate to the bottom-most bucket that has these allegations
+                    int curBucket = revealThreshold-1;
+                    String collId = matching.getString("identifier"); // Identifier of an allegation in the matching collection
+                    String collPRF; // PRF of the collection in the current bucket
+                    while (true) {
+                        ResultSet nextMatching = dbStatement.executeQuery("SELECT prf FROM Allegations WHERE identifier='"
+                                                            + collId
+                                                            + "' AND bucket=" + curBucket);
+                        nextMatching.next();
+                        collPRF = nextMatching.getString("prf");
+                        if (matching.first()) {
+                            -- curBucket;
+                            dbStatement.executeUpdate("INSERT INTO Allegations(identifier, bucket, prf, threshold) VALUES('"
+                                                      + encodeToBase64(mac.toBytes())
+                                                      + "', '" + collPRF
+                                                      + "', " + curBucket
+                                                      + ", " + revealThreshold + ")");
+                        }
+                        else
+                            break;
+                    }
+
+                    // See if we can go down further
+                    while (true) {
+                        ResultSet collectionSizeRes = dbStatement.executeQuery("SELECT count(identifier), min(threshold) FROM Allegations WHERE prf='"
+                                                                               + collPRF + "' AND bucket='" + curBucket + "'");
+                        collectionSizeRes.first();
+                        int collectionSize = collectionSizeRes.getInt("count(identifier)");
+                        int minThreshold = collectionSizeRes.getInt("min(threshold)");
+                        if (minThreshold >= curBucket + collectionSize)
+                            break;
+                        -- curBucket;
+                        // TODO(venkat): insert into next bucket
+                    }
                 }
                 else {
                     System.err.println("Unrecognized command '" + action +"'.");
@@ -277,6 +338,7 @@ public class Server {
 
             dbStatement.executeUpdate("CREATE TABLE Buckets(threshold INT PRIMARY KEY, prf VARCHAR(4000))");
             dbStatement.executeUpdate("CREATE TABLE Identities(identity VARCHAR(4000), revealKey VARCHAR(4000))");
+            dbStatement.executeUpdate("CREATE TABLE Allegations(identifier VARCHAR(3072) PRIMARY KEY, prf VARCHAR(4000), bucket INT, threshold INT)");
         }
     }
 }

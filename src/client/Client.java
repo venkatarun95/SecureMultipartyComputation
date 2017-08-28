@@ -150,22 +150,29 @@ public class Client {
 }
 
     private static void fileAllegation(BigInteger metaData, int revealThreshold, String identityFilename) throws IOException, ClassNotFoundException {
+        // Read client data from file
         FileInputStream inStream = new FileInputStream(identityFilename);
         ObjectInput inObjStream = new ObjectInputStream(inStream);
         IdentityFile file = (IdentityFile)inObjStream.readObject();
+        inObjStream.close();
+        inStream.close();
 
-        PedersonShare[] shares = PedersonShare.shareValue(file.tickets[file.numUsed],
+        PedersonShare[] ticketShares = PedersonShare.shareValue(file.tickets[file.numUsed],
                                                           numServers/2,
                                                           numServers);
+        PedersonShare[] metaDataShares = PedersonShare.shareValue(metaData,
+                                                                  numServers/2,
+                                                                  numServers);
+
         // Send to servers
         for (int i = 0; i < numServers; ++i) {
             int serverIndex = (int)inStreams[i].readObject();
             outStreams[i].writeObject(new String("Allege"));
-            outStreams[i].writeObject(shares[serverIndex]);
+            outStreams[i].writeObject(ticketShares[serverIndex]);
             outStreams[i].writeObject(file.macs[file.numUsed]);
+            outStreams[i].writeObject(metaDataShares[serverIndex]);
             outStreams[i].writeObject(revealThreshold);
             outStreams[i].flush();
-            // TODO(venkat): update numUsed
         }
 
         // Receive from servers
@@ -178,5 +185,12 @@ public class Client {
         else
             System.out.println("Identity not approved.");
 
+        // Store updated client data to file
+        ++ file.numUsed;
+        FileOutputStream outStream = new FileOutputStream(identityFilename);
+        ObjectOutput outObjStream = new ObjectOutputStream(outStream);
+        outObjStream.writeObject(file);
+        outObjStream.close();
+        outStream.close();
     }
 }
