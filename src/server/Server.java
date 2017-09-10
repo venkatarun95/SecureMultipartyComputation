@@ -34,6 +34,7 @@ public class Server {
     // Database variables
     static Connection dbConnect;
     static Statement dbStatement;
+    static Statement dbStatement2;
 
     // Crypto variables
     static PRF idMacPRF;
@@ -66,9 +67,10 @@ public class Server {
 						return;
 				}
 
-        System.out.println("Server setup complete. Waiting for clients.");
+        System.out.println("Server setup complete.");
 
 				while (true) {
+            System.out.println("Waiting for clients.");
 						ObjectInputStream inStream;
 						ObjectOutputStream outStream;
 						try {
@@ -131,32 +133,36 @@ public class Server {
                         continue;
 
                     // Do the bucketing
-                    PRF bucket = getBucket(revealThreshold);
+                    PRF bucket = getBucket(revealThreshold - 1);
                     Element prf = bucket.compute(metaDataShare, channels);
                     ResultSet matching = dbStatement.executeQuery("SELECT identifier FROM Allegations WHERE prf='"
                                                                   + encodeToBase64(prf.toBytes())
                                                                   + "' AND bucket=" + (revealThreshold-1));
-                    dbStatement.executeUpdate("INSERT INTO Allegations(identifier, bucket, prf, threshold) VALUES('"
+                    boolean matchExists = matching.first();
+                    String collId = null;
+                    if (matchExists)
+                        collId = matching.getString("identifier"); // Identifier of an allegation in the matching collection
+                    int curBucket = revealThreshold-1;
+                    dbStatement.executeUpdate("INSERT INTO Allegations(identifier, prf, bucket, threshold) VALUES('"
                                               + encodeToBase64(mac.toBytes())
                                               + "', '" + encodeToBase64(prf.toBytes())
-                                              + "', " + (revealThreshold-1)
+                                              + "', " + curBucket
                                               + ", " + revealThreshold + ")");
-                    if (!matching.first())
+                    if (!matchExists)
                         continue; // No matches. Bucketing algorithm ends
 
                     // Navigate to the bottom-most bucket that has these allegations
-                    int curBucket = revealThreshold-1;
-                    String collId = matching.getString("identifier"); // Identifier of an allegation in the matching collection
-                    String collPRF; // PRF of the collection in the current bucket
+                    // PRF of the collection in the current bucket
+                    String collPRF = encodeToBase64(prf.toBytes());
                     while (true) {
                         ResultSet nextMatching = dbStatement.executeQuery("SELECT prf FROM Allegations WHERE identifier='"
-                                                            + collId
-                                                            + "' AND bucket=" + curBucket);
-                        nextMatching.next();
-                        collPRF = nextMatching.getString("prf");
-                        if (matching.first()) {
+                                                                          + collId
+                                                                          + "' AND bucket=" + (curBucket-1));
+                        if (nextMatching.next()) {
+                            collPRF = nextMatching.getString("prf");
+                            //if (matching.first()) {
                             -- curBucket;
-                            dbStatement.executeUpdate("INSERT INTO Allegations(identifier, bucket, prf, threshold) VALUES('"
+                            dbStatement.executeUpdate("INSERT INTO Allegations(identifier, prf, bucket, threshold) VALUES('"
                                                       + encodeToBase64(mac.toBytes())
                                                       + "', '" + collPRF
                                                       + "', " + curBucket
@@ -165,6 +171,7 @@ public class Server {
                         else
                             break;
                     }
+                    System.out.println("Dropped to bucket " + curBucket);
 
                     // See if we can go down further
                     while (true) {
@@ -173,10 +180,30 @@ public class Server {
                         collectionSizeRes.first();
                         int collectionSize = collectionSizeRes.getInt("count(identifier)");
                         int minThreshold = collectionSizeRes.getInt("min(threshold)");
+                        // TODO(venkat): Verify logic and update paper if necessary
+                        System.out.println("Condition: " + minThreshold + " " + curBucket + " " + collectionSize);
                         if (minThreshold >= curBucket + collectionSize)
                             break;
+
+                        // Insert into next bucket
                         -- curBucket;
-                        // TODO(venkat): insert into next bucket
+                        PRF newBucket = getBucket(curBucket);
+                        Element newPrf = bucket.compute(metaDataShare, channels);
+                        ResultSet collection = dbStatement.executeQuery("SELECT identifier, prf, bucket, threshold FROM Allegations WHERE prf='"
+                                                                        + collPRF + "' AND bucket='" + (curBucket+1) + "'");
+                        while (collection.next()) {
+                            System.out.println("Copying allegation to " + curBucket);
+                            String itemIdentifier = collection.getString("identifier");
+                            String itemPrf = collection.getString("prf");
+                            int itemBucket = collection.getInt("bucket");
+                            int itemThreshold = collection.getInt("threshold");
+                            assert(itemBucket-1 == curBucket);
+                            dbStatement2.executeUpdate("INSERT INTO Allegations(identifier, prf, bucket, threshold) VALUES('"
+                                                      + itemIdentifier
+                                                      + "', '" + newPrf
+                                                      + "', " + curBucket
+                                                      + ", " + itemThreshold + ")");
+                        }
                     }
                 }
                 else {
@@ -185,7 +212,7 @@ public class Server {
                 }
             }
 						catch (IOException|ClassNotFoundException|SQLException e) {
-								System.err.println("Error while communicating with client.\n" + e.getMessage());
+								System.err.println("Error while processing request.\n" + e.getMessage());
 						}
 				}
 		}
@@ -285,6 +312,7 @@ public class Server {
         //Class.forName("com.mysql.jdbc.Driver");
         dbConnect = DriverManager.getConnection(address);
         dbStatement = dbConnect.createStatement();
+        dbStatement2 = dbConnect.createStatement();
 
         // Use database if present. Else create
         ResultSet databases = dbStatement.executeQuery("SHOW DATABASES");
@@ -336,9 +364,10 @@ public class Server {
             dbStatement.executeUpdate("INSERT INTO Config(name, charVal) VALUES('idMacPRF', '" + encodeToBase64(idMacPRF) + "')");
             dbStatement.executeUpdate("INSERT INTO Config(name, charVal) VALUES('idRevealPRF', '" + encodeToBase64(idRevealPRF) + "')");
 
+            // TODO(venkat): make appropriate fields 'not null'
             dbStatement.executeUpdate("CREATE TABLE Buckets(threshold INT PRIMARY KEY, prf VARCHAR(4000))");
             dbStatement.executeUpdate("CREATE TABLE Identities(identity VARCHAR(4000), revealKey VARCHAR(4000))");
-            dbStatement.executeUpdate("CREATE TABLE Allegations(identifier VARCHAR(3072) PRIMARY KEY, prf VARCHAR(4000), bucket INT, threshold INT)");
+            dbStatement.executeUpdate("CREATE TABLE Allegations(identifier VARCHAR(3000), prf VARCHAR(4000), bucket INT, threshold INT, PRIMARY KEY(identifier, bucket))");
         }
     }
 }
