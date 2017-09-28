@@ -1,8 +1,11 @@
 package client;
 
+import javax.crypto.Cipher;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.*;
 import java.math.BigInteger;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.Arrays;
 
@@ -48,8 +51,8 @@ public class Client {
     }
 
     public static void main(String[] args) {
-				if (args.length != 3) {
-						System.out.println("Arguments: [serverIp:port::...] register|file identity_file");
+				if (args.length < 3) {
+						System.err.println("Arguments: [serverIp:port::...] register|file identity_file [threshold] [meta data] [allegation]");
 						return;
 				}
         if (!args[1].equals("register") && !args[1].equals("file")) {
@@ -63,8 +66,16 @@ public class Client {
         try {
             if (args[1].equals("register"))
                 register(5, args[2]);
-            else
-                fileAllegation(BigInteger.valueOf(10), 5, args[2]);
+            else {
+                if (args.length != 6) {
+                    System.err.println("Arguments: [serverIp:port::...] file identity_file [threshold] [meta data] [allegation]");
+                    return;
+                }
+                fileAllegation(BigInteger.valueOf(Integer.parseInt(args[4])),
+                               args[5],
+                               Integer.parseInt(args[3]),
+                               args[2]);
+            }
 				}
         catch (IOException|ClassNotFoundException e) {
             System.err.println("Error while communicating with server.\n" + e.getMessage());
@@ -149,7 +160,7 @@ public class Client {
         outStream.close();
 }
 
-    private static void fileAllegation(BigInteger metaData, int revealThreshold, String identityFilename) throws IOException, ClassNotFoundException {
+    private static void fileAllegation(BigInteger metaData, String allegation, int revealThreshold, String identityFilename) throws IOException, ClassNotFoundException {
         // Read client data from file
         FileInputStream inStream = new FileInputStream(identityFilename);
         ObjectInput inObjStream = new ObjectInputStream(inStream);
@@ -164,33 +175,61 @@ public class Client {
                                                                   numServers/2,
                                                                   numServers);
 
+        // Prepare encrypted allegation
+        try {
+            BigInteger aesKeyInt = new BigInteger(PedersonShare.modQ.bitLength(), random).mod(PedersonShare.modQ);
+            byte[] unpaddedKey = aesKeyInt.toByteArray();
+            byte[] paddedKey = new byte[16];
+            for (int i = 0; i < 16; ++i) {
+                if (i < unpaddedKey.length) paddedKey[i] = unpaddedKey[i];
+                else paddedKey[i] = 0;
+            }
+            SecretKeySpec secretKey = new SecretKeySpec(paddedKey, "AES");
+            Cipher cipher = Cipher.getInstance("AES");
+            cipher.init(Cipher.ENCRYPT_MODE, secretKey);
+            byte[] allegationCipherText = cipher.doFinal(allegation.getBytes(StandardCharsets.UTF_8));
+            System.out.println(allegationCipherText);
+
+            SecretKeySpec secretKey2 = new SecretKeySpec(paddedKey, "AES");
+            Cipher cipher2 = Cipher.getInstance("AES");
+            cipher.init(Cipher.DECRYPT_MODE, secretKey2);
+            String decrypted = new String(cipher.doFinal(allegationCipherText), StandardCharsets.UTF_8);
+            System.out.println(decrypted);
+        }
+        catch (Exception e) {
+            System.err.println("Fatal error while encrypting allegation.\n" + e.getMessage());
+        }
+
+        if (revealThreshold < 1000)
+            return;
+
         // Send to servers
-        for (int i = 0; i < numServers; ++i) {
-            int serverIndex = (int)inStreams[i].readObject();
-            outStreams[i].writeObject(new String("Allege"));
-            outStreams[i].writeObject(ticketShares[serverIndex]);
-            outStreams[i].writeObject(file.macs[file.numUsed]);
-            outStreams[i].writeObject(metaDataShares[serverIndex]);
-            outStreams[i].writeObject(revealThreshold);
-            outStreams[i].flush();
-        }
+        // for (int i = 0; i < numServers; ++i) {
+        //     int serverIndex = (int)inStreams[i].readObject();
+        //     outStreams[i].writeObject(new String("Allege"));
+        //     outStreams[i].writeObject(ticketShares[serverIndex]);
+        //     outStreams[i].writeObject(file.macs[file.numUsed]);
+        //     outStreams[i].writeObject(metaDataShares[serverIndex]);
+        //     outStreams[i].writeObject(revealThreshold);
+        //     outStreams[i].flush();
+        // }
 
-        // Receive from servers
-        boolean identityApproved = true;
-        for (int i = 0; i < numServers; ++i) {
-            identityApproved = identityApproved && (boolean)inStreams[i].readObject();
-        }
-        if (identityApproved)
-            System.out.println("Identity approved.");
-        else
-            System.out.println("Identity not approved.");
+        // // Receive from servers
+        // boolean identityApproved = true;
+        // for (int i = 0; i < numServers; ++i) {
+        //     identityApproved = identityApproved && (boolean)inStreams[i].readObject();
+        // }
+        // if (identityApproved)
+        //     System.out.println("Identity approved.");
+        // else
+        //     System.out.println("Identity not approved.");
 
-        // Store updated client data to file
-        ++ file.numUsed;
-        FileOutputStream outStream = new FileOutputStream(identityFilename);
-        ObjectOutput outObjStream = new ObjectOutputStream(outStream);
-        outObjStream.writeObject(file);
-        outObjStream.close();
-        outStream.close();
+        // // Store updated client data to file
+        // ++ file.numUsed;
+        // FileOutputStream outStream = new FileOutputStream(identityFilename);
+        // ObjectOutput outObjStream = new ObjectOutputStream(outStream);
+        // outObjStream.writeObject(file);
+        // outObjStream.close();
+        // outStream.close();
     }
 }
