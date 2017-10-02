@@ -1,6 +1,6 @@
 #!/bin/bash
 
-classpath=../scapi/assets/Scapi-2.4.jar::../scapi/assets/commons-exec-1.2.jar:../scapi/assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../scapi/assets/activemq-all-5.9.1.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar:/usr/share/java/mysql-connector-java.jar
+classpath=../assets/Scapi-2.4.jar::../assets/commons-exec-1.2.jar:../assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../assets/activemq-all-5.9.1.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar:/usr/share/java/mysql-connector-java.jar
 lib_path=../scapi/assets/:/usr/ssl/lib/
 export LD_LIBRARY_PATH=/usr/ssl/lib
 
