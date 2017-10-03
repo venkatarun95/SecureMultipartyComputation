@@ -1,8 +1,8 @@
 #!/bin/bash
 
 classpath=../assets/Scapi-2.4.jar::../assets/commons-exec-1.2.jar:../assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../assets/activemq-all-5.9.1.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar:/usr/share/java/mysql-connector-java.jar
-lib_path=../scapi/assets/:/usr/ssl/lib/
-export LD_LIBRARY_PATH=/usr/ssl/lib
+lib_path=../assets/:/usr/ssl/lib/
+export LD_LIBRARY_PATH=$lib_path
 
 java -classpath $classpath -Djava.library.path=$lib_path server.Server 8885 socketProps0 "jdbc:mysql://localhost/?user=escrow1&password=e1&useSSL=false" escrow1 &
 java -classpath $classpath -Djava.library.path=$lib_path server.Server 8886 socketProps1 "jdbc:mysql://localhost/?user=escrow2&password=e2&useSSL=false" escrow2 &
