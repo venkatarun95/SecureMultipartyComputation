@@ -1,9 +1,12 @@
 package server;
 
+import javax.crypto.Cipher;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.TimeoutException;
@@ -112,6 +115,8 @@ public class Server {
                     claimedMac.setFromBytes((byte[])inStream.readObject());
                     PedersonShare metaDataShare = (PedersonShare)inStream.readObject();
                     int revealThreshold = (int)inStream.readObject();
+                    PedersonShare textShare = (PedersonShare)inStream.readObject();
+                    byte[] textCrypt = (byte[])inStream.readObject();
 
                     // Calculate mac and verify claimedMac is correct
                     Element mac = idMacPRF.compute(ticketShare, channels);
@@ -143,11 +148,13 @@ public class Server {
                     if (matchExists)
                         collId = matching.getString("identifier"); // Identifier of an allegation in the matching collection
                     int curBucket = revealThreshold-1;
-                    dbStatement.executeUpdate("INSERT INTO Allegations(identifier, prf, bucket, threshold) VALUES('"
+                    dbStatement.executeUpdate("INSERT INTO Allegations(identifier, prf, bucket, threshold, textShare, textCrypt) VALUES('"
                                               + encodeToBase64(mac.toBytes())
                                               + "', '" + encodeToBase64(prf.toBytes())
                                               + "', " + curBucket
-                                              + ", " + revealThreshold + ")");
+                                              + ", " + revealThreshold
+                                              + ", '" + encodeToBase64(textShare)
+                                              + "', '" + encodeToBase64(textCrypt) + "')");
                     if (!matchExists)
                         continue; // No matches. Bucketing algorithm ends
 
@@ -162,11 +169,13 @@ public class Server {
                             collPRF = nextMatching.getString("prf");
                             //if (matching.first()) {
                             -- curBucket;
-                            dbStatement.executeUpdate("INSERT INTO Allegations(identifier, prf, bucket, threshold) VALUES('"
+                            dbStatement.executeUpdate("INSERT INTO Allegations(identifier, prf, bucket, threshold, textShare, textCrypt) VALUES('"
                                                       + encodeToBase64(mac.toBytes())
                                                       + "', '" + collPRF
                                                       + "', " + curBucket
-                                                      + ", " + revealThreshold + ")");
+                                                      + ", " + revealThreshold
+                                                      + ", '" + encodeToBase64(textShare)
+                                                      + "', '" + encodeToBase64(textCrypt) + "')");
                         }
                         else
                             break;
@@ -181,7 +190,6 @@ public class Server {
                         int collectionSize = collectionSizeRes.getInt("count(identifier)");
                         int minThreshold = collectionSizeRes.getInt("min(threshold)");
                         // TODO(venkat): Verify logic and update paper if necessary
-                        System.out.println("Condition: " + minThreshold + " " + curBucket + " " + collectionSize);
                         if (minThreshold >= curBucket + collectionSize)
                             break;
 
@@ -189,7 +197,7 @@ public class Server {
                         -- curBucket;
                         PRF newBucket = getBucket(curBucket);
                         Element newPrf = bucket.compute(metaDataShare, channels);
-                        ResultSet collection = dbStatement.executeQuery("SELECT identifier, prf, bucket, threshold FROM Allegations WHERE prf='"
+                        ResultSet collection = dbStatement.executeQuery("SELECT identifier, prf, bucket, threshold, textShare, textCrypt FROM Allegations WHERE prf='"
                                                                         + collPRF + "' AND bucket='" + (curBucket+1) + "'");
                         while (collection.next()) {
                             System.out.println("Copying allegation to " + curBucket);
@@ -197,12 +205,54 @@ public class Server {
                             String itemPrf = collection.getString("prf");
                             int itemBucket = collection.getInt("bucket");
                             int itemThreshold = collection.getInt("threshold");
+                            String itemTextShare = collection.getString("textShare");
+                            String itemTextCrypt = collection.getString("textCrypt");
                             assert(itemBucket-1 == curBucket);
-                            dbStatement2.executeUpdate("INSERT INTO Allegations(identifier, prf, bucket, threshold) VALUES('"
+                            dbStatement2.executeUpdate("INSERT INTO Allegations(identifier, prf, bucket, threshold, textShare, textCrypt) VALUES('"
                                                       + itemIdentifier
                                                       + "', '" + newPrf
                                                       + "', " + curBucket
-                                                      + ", " + itemThreshold + ")");
+                                                      + ", " + itemThreshold
+                                                      + ", '" + itemTextShare
+                                                      + "', '" + itemTextCrypt + "')");
+                        }
+
+                        if (curBucket <= 0) {
+                            System.out.println("A group of allegations is about to be revealed!");
+                            ResultSet revealCollection = dbStatement.executeQuery("SELECT identifier, prf, bucket, threshold, textShare, textCrypt FROM Allegations WHERE prf='"
+                                                                            + collPRF + "' AND bucket='" + (curBucket+1) + "' ORDER BY identifier");
+                            while (revealCollection.next()) {
+                                String itemIdentifier = revealCollection.getString("identifier");
+                                String itemPrf = revealCollection.getString("prf");
+                                int itemBucket = revealCollection.getInt("bucket");
+                                int itemThreshold = revealCollection.getInt("threshold");
+                                PedersonShare itemTextShare = (PedersonShare)decodeFromBase64(revealCollection.getString("textShare"));
+                                byte[] itemTextCrypt = (byte[])decodeFromBase64(revealCollection.getString("textCrypt"));
+
+                                BigInteger aesKeyInt = PedersonComm.combineShares(itemTextShare, channels);
+
+                                // Decrypt allegation
+                                byte[] unpaddedKey = aesKeyInt.toByteArray();
+                                byte[] paddedKey = new byte[16];
+                                for (int i = 0; i < 16; ++i) {
+                                    if (i < unpaddedKey.length) paddedKey[i] = unpaddedKey[i];
+                                    else paddedKey[i] = 0;
+                                }
+                                String decrypted;
+                                try {
+                                    SecretKeySpec secretKey = new SecretKeySpec(paddedKey, "AES");
+                                    Cipher cipher = Cipher.getInstance("AES");
+                                    cipher.init(Cipher.DECRYPT_MODE, secretKey);
+                                    decrypted = new String(cipher.doFinal(itemTextCrypt), StandardCharsets.UTF_8);
+                                }
+                                catch (Exception e) {
+                                    System.err.println("Fatal error while decrypting allegation.\n" + e.getMessage());
+                                    continue;
+                                }
+                                System.out.println("Decrypted allegation:");
+                                System.out.println("Allegation: " + decrypted);
+                            }
+                            break;
                         }
                     }
                 }
@@ -367,7 +417,7 @@ public class Server {
             // TODO(venkat): make appropriate fields 'not null'
             dbStatement.executeUpdate("CREATE TABLE Buckets(threshold INT PRIMARY KEY, prf VARCHAR(4000))");
             dbStatement.executeUpdate("CREATE TABLE Identities(identity VARCHAR(4000), revealKey VARCHAR(4000))");
-            dbStatement.executeUpdate("CREATE TABLE Allegations(identifier VARCHAR(3000), prf VARCHAR(4000), bucket INT, threshold INT, PRIMARY KEY(identifier, bucket))");
+            dbStatement.executeUpdate("CREATE TABLE Allegations(identifier VARCHAR(3000), prf VARCHAR(4000), bucket INT, threshold INT, textShare VARCHAR(4000), textCrypt VARCHAR(16000), PRIMARY KEY(identifier, bucket))");
         }
     }
 }

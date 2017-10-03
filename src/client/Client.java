@@ -168,16 +168,11 @@ public class Client {
         inObjStream.close();
         inStream.close();
 
-        PedersonShare[] ticketShares = PedersonShare.shareValue(file.tickets[file.numUsed],
-                                                          numServers/2,
-                                                          numServers);
-        PedersonShare[] metaDataShares = PedersonShare.shareValue(metaData,
-                                                                  numServers/2,
-                                                                  numServers);
-
         // Prepare encrypted allegation
+        BigInteger aesKeyInt;
+        byte[] allegationCipherText;
         try {
-            BigInteger aesKeyInt = new BigInteger(PedersonShare.modQ.bitLength(), random).mod(PedersonShare.modQ);
+            aesKeyInt = new BigInteger(PedersonShare.modQ.bitLength(), random).mod(PedersonShare.modQ);
             byte[] unpaddedKey = aesKeyInt.toByteArray();
             byte[] paddedKey = new byte[16];
             for (int i = 0; i < 16; ++i) {
@@ -187,49 +182,52 @@ public class Client {
             SecretKeySpec secretKey = new SecretKeySpec(paddedKey, "AES");
             Cipher cipher = Cipher.getInstance("AES");
             cipher.init(Cipher.ENCRYPT_MODE, secretKey);
-            byte[] allegationCipherText = cipher.doFinal(allegation.getBytes(StandardCharsets.UTF_8));
-            System.out.println(allegationCipherText);
-
-            SecretKeySpec secretKey2 = new SecretKeySpec(paddedKey, "AES");
-            Cipher cipher2 = Cipher.getInstance("AES");
-            cipher.init(Cipher.DECRYPT_MODE, secretKey2);
-            String decrypted = new String(cipher.doFinal(allegationCipherText), StandardCharsets.UTF_8);
-            System.out.println(decrypted);
+            allegationCipherText = cipher.doFinal(allegation.getBytes(StandardCharsets.UTF_8));
         }
         catch (Exception e) {
             System.err.println("Fatal error while encrypting allegation.\n" + e.getMessage());
+            return;
         }
 
-        if (revealThreshold < 1000)
-            return;
+        PedersonShare[] ticketShares = PedersonShare.shareValue(file.tickets[file.numUsed],
+                                                                numServers/2,
+                                                                numServers);
+        PedersonShare[] metaDataShares = PedersonShare.shareValue(metaData,
+                                                                  numServers/2,
+                                                                  numServers);
+        PedersonShare[] secretKeyShares = PedersonShare.shareValue(aesKeyInt,
+                                                                   numServers/2,
+                                                                   numServers);
 
         // Send to servers
-        // for (int i = 0; i < numServers; ++i) {
-        //     int serverIndex = (int)inStreams[i].readObject();
-        //     outStreams[i].writeObject(new String("Allege"));
-        //     outStreams[i].writeObject(ticketShares[serverIndex]);
-        //     outStreams[i].writeObject(file.macs[file.numUsed]);
-        //     outStreams[i].writeObject(metaDataShares[serverIndex]);
-        //     outStreams[i].writeObject(revealThreshold);
-        //     outStreams[i].flush();
-        // }
+        for (int i = 0; i < numServers; ++i) {
+            int serverIndex = (int)inStreams[i].readObject();
+            outStreams[i].writeObject(new String("Allege"));
+            outStreams[i].writeObject(ticketShares[serverIndex]);
+            outStreams[i].writeObject(file.macs[file.numUsed]);
+            outStreams[i].writeObject(metaDataShares[serverIndex]);
+            outStreams[i].writeObject(revealThreshold);
+            outStreams[i].writeObject(secretKeyShares[serverIndex]);
+            outStreams[i].writeObject(allegationCipherText);
+            outStreams[i].flush();
+        }
 
-        // // Receive from servers
-        // boolean identityApproved = true;
-        // for (int i = 0; i < numServers; ++i) {
-        //     identityApproved = identityApproved && (boolean)inStreams[i].readObject();
-        // }
-        // if (identityApproved)
-        //     System.out.println("Identity approved.");
-        // else
-        //     System.out.println("Identity not approved.");
+        // Receive from servers
+        boolean identityApproved = true;
+        for (int i = 0; i < numServers; ++i) {
+            identityApproved = identityApproved && (boolean)inStreams[i].readObject();
+        }
+        if (identityApproved)
+            System.out.println("Identity approved.");
+        else
+            System.out.println("Identity not approved.");
 
-        // // Store updated client data to file
-        // ++ file.numUsed;
-        // FileOutputStream outStream = new FileOutputStream(identityFilename);
-        // ObjectOutput outObjStream = new ObjectOutputStream(outStream);
-        // outObjStream.writeObject(file);
-        // outObjStream.close();
-        // outStream.close();
+        // Store updated client data to file
+        ++ file.numUsed;
+        FileOutputStream outStream = new FileOutputStream(identityFilename);
+        ObjectOutput outObjStream = new ObjectOutputStream(outStream);
+        outObjStream.writeObject(file);
+        outObjStream.close();
+        outStream.close();
     }
 }
