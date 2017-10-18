@@ -1,6 +1,7 @@
 import argparse
 import os
 import pickle
+import re
 import subprocess
 import sys
 import threading
@@ -9,6 +10,7 @@ import time
 config = {
     'classpath': '../assets/Scapi-2.4.jar::../assets/commons-exec-1.2.jar:../assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../assets/activemq-all-5.9.1.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar:/usr/share/java/mysql-connector-java.jar:../src',
     'lib_path': '../assets/:/usr/ssl/lib/',
+    'keys_per_file': 5 # Number of keys stored in each key file
 }
 
 # To be decided at run-time
@@ -21,11 +23,15 @@ params = {}
 
 def init_params():
     parser = argparse.ArgumentParser('python run-client.py')
-    parser.add_argument('-m', '--mode', help='Mode to operate in [register|file]')
+    parser.add_argument('-m', '--mode', help='Mode to operate in', choices=['register', 'file'])
     parser.add_argument('-c', '--config-file', help='File containing server information')
     parser.add_argument('-d', '--key-dir', help='Directory where key files are stored/to be stored')
     parser.add_argument('-n', '--num-req', help='Number of requests to make', type=int, default=10)
+    parser.add_argument('--prime', help='Should the script prime the database to create buckets?', type=bool, default=True)
     args = parser.parse_args()
+
+    if args.mode == 'register':
+        args.prime = False
 
     f = open(args.config_file, 'r')
     params['server_addrs'] = pickle.load(f)
@@ -33,34 +39,107 @@ def init_params():
     params['mode'] = args.mode
     params['keydir'] = args.key_dir
     params['num_requests'] = args.num_req
+    params['prime'] = args.prime
 
 class RunClient (threading.Thread):
     def __init__(self, replica_id):
         threading.Thread.__init__(self)
         self.replica_id = replica_id
+        self.__update_key_cache_file()
+
+    def __update_key_cache_file(self):
+        '''Load/create the file and dictionary storing How many keys are available in
+        which key file
+
+        This is stored in self.key_cache_filename. The format is a dictionary
+        with (key - key file name, value - number of keys remaining)
+        '''
+        self.key_cache_filename = os.path.join(params['keydir'],
+                                               'key-cache-%d' % self.replica_id)
+        if os.path.isfile(self.key_cache_filename):
+            key_cache_file = open(self.key_cache_filename, 'r')
+            self.key_cache = pickle.load(key_cache_file)
+        else:
+            self.key_cache = {}
+        re_keyfile = re.compile('.*/key-([0-9]*)-([0-9]*).key')
+        for fname in os.listdir(params['keydir']):
+            fname = os.path.join(params['keydir'], fname)
+            match_keyfile = re_keyfile.match(fname)
+            if match_keyfile is None:
+                continue
+            if fname in self.key_cache:
+                continue
+            if self.replica_id == int(match_keyfile.groups()[0]):
+                self.key_cache[fname] = config['keys_per_file']
+        print(self.key_cache)
+        pickle.dump(self.key_cache, open(self.key_cache_filename, 'w'))
+
+
+    def __get_keyfile(self):
+        '''Returns the name of a keyfile that has unused keys. If no such file exists,
+        returns None.
+
+        Also updates self.key_cache and the appropriate pickle file.
+        '''
+        for key_filename in self.key_cache:
+            if self.key_cache[key_filename] > 0:
+                self.key_cache[key_filename] -= 1
+                pickle.dump(self.key_cache, open(self.key_cache_filename, 'w'))
+                return key_filename
+        print("Ran out of registered keys!")
+        exit(1)
+        return None
 
     def run(self):
         # Prepare the address string
         addr_str = '::'.join(['%s:%d' % (x[0], x[1]) for x in params['server_addrs'][self.replica_id]])
         for req in range(params['num_requests']):
             if params['mode'] == 'register':
-                args = ['register', os.path.join('keydir',
-                                                 'key-%d-%d.key' % (self.replica_id, req))]
+                key_filename = os.path.join(params['keydir'], 'key-%d-%d.key' % (self.replica_id, req))
+                args = ['register', key_filename]
+            elif params['mode'] == 'file':
+                key_filename = self.__get_keyfile()
+                threshold = 2
+                meta_data = 10
+                allegation = 'HelloWorld'
+                args = ['file', key_filename, str(threshold), str(meta_data), allegation]
 
             start_time = time.time()
-            subprocess.call(['java', '-classpath', config['classpath'],
-                             '-Djava.library.path=%s' % config['lib_path'],
-                             'client.Client', addr_str] + args)
+            cmd = ['java', '-classpath', config['classpath'],
+                   '-Djava.library.path=%s' % config['lib_path'],
+                   'client.Client', addr_str] + args
+            #print(' '.join(cmd))
+            subprocess.call(cmd)
             elapsed_time = time.time() - start_time
             print("Elapsed time: %f" % elapsed_time)
 
+    def prime_buckets(self, max_bucket):
+        '''Files useless allegations into buckets so that they are created by the
+        servers. Helps avoid race-conditions later
+        '''
+        addr_str = '::'.join(['%s:%d' % (x[0], x[1]) for x in params['server_addrs'][0]])
+        for thresh in range(2, max_bucket):
+            key_filename = self.__get_keyfile()
+            args = ['file', key_filename, str(thresh), '1', 'priming-allegation']
+            cmd = ['java', '-classpath', config['classpath'],
+                   '-Djava.library.path=%s' % config['lib_path'],
+                   'client.Client', addr_str] + args
+            subprocess.call(cmd)
+
 if __name__ == "__main__":
     init_params()
+    if params['prime']:
+        pass #prime_buckets(10)
+
     clients = []
     for replica_id in range(params['parallelism']):
         client = RunClient(replica_id)
-        client.start()
         clients.append(client)
+
+    if params['prime']:
+        clients[0].prime_buckets(10)
+    for client in clients:
+        client.start()
 
     for client in clients:
         client.join()
