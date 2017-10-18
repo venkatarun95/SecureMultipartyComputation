@@ -277,7 +277,6 @@ public class Server {
      */
     private static PRF getBucket(int threshold) throws SQLException,IOException,ClassNotFoundException {
         PRF result;
-        dbStatement.executeUpdate("LOCK TABLES Buckets WRITE");
         ResultSet buckets = dbStatement.executeQuery("SELECT prf FROM Buckets WHERE threshold=" + threshold);
         if (!buckets.first()) {
             // Create bucket
@@ -287,7 +286,6 @@ public class Server {
         else
             // Read bucket from DB
             result = (PRF)decodeFromBase64(buckets.getString("prf"));
-        dbStatement.executeUpdate("UNLOCK TABLES");
         return result;
     }
 
