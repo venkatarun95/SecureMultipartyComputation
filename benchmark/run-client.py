@@ -1,6 +1,7 @@
 import argparse
 import os
 import pickle
+import random
 import re
 import subprocess
 import sys
@@ -27,11 +28,11 @@ def init_params():
     parser.add_argument('-c', '--config-file', help='File containing server information')
     parser.add_argument('-d', '--key-dir', help='Directory where key files are stored/to be stored')
     parser.add_argument('-n', '--num-req', help='Number of requests to make', type=int, default=10)
-    parser.add_argument('--prime', help='Should the script prime the database to create buckets?', type=bool, default=True)
+    parser_prime = parser.add_mutually_exclusive_group(required=False)
+    parser_prime.add_argument('--prime', dest='prime', action='store_true', help="Prime the servers to pre-create buckets and avoid race condition")
+    parser_prime.add_argument('--no-prime', dest='prime', action='store_false')
+    parser.set_defaults(prime=True)
     args = parser.parse_args()
-
-    if args.mode == 'register':
-        args.prime = False
 
     f = open(args.config_file, 'r')
     params['server_addrs'] = pickle.load(f)
@@ -71,7 +72,6 @@ class RunClient (threading.Thread):
                 continue
             if self.replica_id == int(match_keyfile.groups()[0]):
                 self.key_cache[fname] = config['keys_per_file']
-        print(self.key_cache)
         pickle.dump(self.key_cache, open(self.key_cache_filename, 'w'))
 
 
@@ -90,28 +90,51 @@ class RunClient (threading.Thread):
         exit(1)
         return None
 
+    def __gen_rnd_allegations(self, num_alleg):
+        res = []
+        while len(res) < num_alleg:
+            thresh = random.expovariate(1.0 / 5.0)
+            thresh = max(min(int(thresh), 20), 2)
+            num_copies = thresh
+            if random.random() < 0.5:
+                num_copies -= 1
+            meta_data = random.randint(0, 1000000)
+            res += [(thresh, meta_data, random.randint(0, 1000)) for _ in range(num_copies)]
+        random.shuffle(res)
+        return res[:num_alleg]
+
     def run(self):
         # Prepare the address string
         addr_str = '::'.join(['%s:%d' % (x[0], x[1]) for x in params['server_addrs'][self.replica_id]])
+        start_time = time.time()
+        allegations = self.__gen_rnd_allegations(params['num_requests'])
         for req in range(params['num_requests']):
             if params['mode'] == 'register':
-                key_filename = os.path.join(params['keydir'], 'key-%d-%d.key' % (self.replica_id, req))
+                key_file_id = req
+                self.__update_key_cache_file()
+                while True:
+                    key_filename = os.path.join(params['keydir'], 'key-%d-%d.key' % (self.replica_id, key_file_id))
+                    if key_filename not in self.key_cache:
+                        break
+                    key_file_id += 1
                 args = ['register', key_filename]
             elif params['mode'] == 'file':
                 key_filename = self.__get_keyfile()
-                threshold = 2
-                meta_data = 10
-                allegation = 'HelloWorld'
-                args = ['file', key_filename, str(threshold), str(meta_data), allegation]
+                alleg = allegations[req]
+                threshold = alleg[0]
+                meta_data = alleg[1]
+                allegation = alleg[2]
+                args = ['file', key_filename, str(threshold), str(meta_data), str(allegation)]
 
-            start_time = time.time()
+            req_start_time = time.time()
             cmd = ['java', '-classpath', config['classpath'],
                    '-Djava.library.path=%s' % config['lib_path'],
                    'client.Client', addr_str] + args
             #print(' '.join(cmd))
             subprocess.call(cmd)
-            elapsed_time = time.time() - start_time
-            print("Elapsed time: %f" % elapsed_time)
+            req_elapsed_time = time.time() - req_start_time
+            tot_elapsed_time = time.time() - start_time
+            print("PERF REPID %d REQID %d LAT %f TPT %f" % (self.replica_id, req, req_elapsed_time, (req + 1) / tot_elapsed_time))
 
     def prime_buckets(self, max_bucket):
         '''Files useless allegations into buckets so that they are created by the
@@ -128,16 +151,13 @@ class RunClient (threading.Thread):
 
 if __name__ == "__main__":
     init_params()
-    if params['prime']:
-        pass #prime_buckets(10)
-
     clients = []
     for replica_id in range(params['parallelism']):
         client = RunClient(replica_id)
         clients.append(client)
 
-    if params['prime']:
-        clients[0].prime_buckets(10)
+    if params['prime'] and params['mode'] == 'file':
+        clients[0].prime_buckets(20)
     for client in clients:
         client.start()
 
