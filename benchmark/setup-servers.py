@@ -1,3 +1,6 @@
+#!/usr/bin/python
+
+import argparse
 import json
 import pickle
 import random
@@ -145,6 +148,7 @@ def start_servers():
         tfile.write(ips)
         tfile.write(ports)
         tfile.close()
+
         try:
             subprocess.Popen(['java', '-classpath', config['classpath'],
                               '-Djava.library.path=%s' % config['lib_path'],
@@ -179,16 +183,40 @@ def close_sockets():
         params['sockets'][sock].shutdown(socket.SHUT_RDWR)
         params['sockets'][sock].close()
 
-if __name__ == "__main__":
-    # For debugging only - rewrite config
-    base_port = int(sys.argv[1])
-    id = int(sys.argv[2])
-    config['this_addr'] = ("127.0.0.1", base_port + id)
-    config['other_addr'] = []
-    for i in range(3):
-        if i == id: continue
-        config['other_addr'] += [("127.0.0.1", base_port + i)]
+def parse_args():
+    '''Take command line arguments and set `config`'''
+    parser = argparse.ArgumentParser('python setup-servers.py')
+    parser.add_argument('-p', '--parallelism', help='Number of parallel server replicas to setup', type=int, default=1)
+    parser_local = parser.add_mutually_exclusive_group(required=False)
+    parser_local.add_argument('--local', dest='local', action='store_true', help='Run all the servers locally according to specified id')
+    parser_local.add_argument('--remote', dest='local', action='store_false', help='Setup servers different servers potentially running in different locations. Use specified addresses')
+    parser.set_defaults(local=True)
 
+    # If running remotely
+    parser.add_argument('-a', '--addr', help="Address of this setup script in (ip, port) tuple", type=str)
+    parser.add_argument('-o', '--other-addr', help="Address of other servers' setup scripts", type=str)
+
+    # If running locally
+    parser.add_argument('-b', '--base-port', help='Base port number to start our servers from. When in local mode, port chosen is base-port + id', type=int)
+    parser.add_argument('-i', '--id', help='ID of the current server. Local mode only', type=int)
+    parser.add_argument('-n', '--num-servers', help='Number of servers', type=int)
+    args = parser.parse_args()
+
+    if args.local:
+        base_port = args.base_port
+        id = args.id
+        config['this_addr'] = ("127.0.0.1", base_port + id)
+        config['other_addr'] = []
+        for i in range(args.num_servers):
+            if i == id: continue
+            config['other_addr'] += [("127.0.0.1", base_port + i)]
+    else:
+        config['parallelism'] = args.parallelism
+        config['this_addr'] = json.loads(args.addr)
+        config['other_addr'] = json.loads(args.other_addr)
+
+if __name__ == "__main__":
+    parse_args()
     print("Beginning server setup. Establishing setup script connections")
     init_params()
     setup_sockets()
