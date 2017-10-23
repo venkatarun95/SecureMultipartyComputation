@@ -183,6 +183,25 @@ def close_sockets():
         params['sockets'][sock].shutdown(socket.SHUT_RDWR)
         params['sockets'][sock].close()
 
+def wait_for_servers():
+    '''Waits till the servers start listening on their sockets'''
+
+    while True:
+        all_started = True
+        proc = subprocess.Popen(['lsof', '-iTCP', '-sTCP:LISTEN', '-n' ,'-P'], stdout=subprocess.PIPE)
+        for replica in params['replica_addrs']:
+            replica_found = False
+            for line in proc.stdout.readlines():
+                if line.find(str(replica[1])) != -1:
+                    replica_found = True
+                    break
+            if not replica_found:
+                all_started = False
+                break
+        if all_started:
+            break
+        time.sleep(1)
+
 def parse_args():
     '''Take command line arguments and set `config`'''
     parser = argparse.ArgumentParser('python setup-servers.py')
@@ -202,6 +221,7 @@ def parse_args():
     parser.add_argument('-n', '--num-servers', help='Number of servers', type=int)
     args = parser.parse_args()
 
+    config['parallelism'] = args.parallelism
     if args.local:
         base_port = args.base_port
         id = args.id
@@ -211,7 +231,6 @@ def parse_args():
             if i == id: continue
             config['other_addr'] += [("127.0.0.1", base_port + i)]
     else:
-        config['parallelism'] = args.parallelism
         config['this_addr'] = json.loads(args.addr)
         config['other_addr'] = json.loads(args.other_addr)
 
@@ -228,4 +247,6 @@ if __name__ == "__main__":
     output_server_addrs()
     print("Config file generated. Closing setup script connections")
     close_sockets()
-    print("Setup script connections closed")
+    print("Setup script connections closed. Waiting for servers to start")
+    wait_for_servers()
+    print("Servers started")
