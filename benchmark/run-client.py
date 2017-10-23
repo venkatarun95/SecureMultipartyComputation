@@ -135,6 +135,7 @@ class RunClient (threading.Thread):
             req_elapsed_time = time.time() - req_start_time
             tot_elapsed_time = time.time() - start_time
             print("PERF REPID %d REQID %d LAT %f TPT %f" % (self.replica_id, req, req_elapsed_time, (req + 1) / tot_elapsed_time))
+            sys.stdout.flush()
 
     def prime_buckets(self, max_bucket):
         '''Files useless allegations into buckets so that they are created by the

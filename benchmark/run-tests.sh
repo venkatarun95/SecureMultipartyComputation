@@ -36,27 +36,31 @@ fi
 tpt=100
 parallelism=1
 export LD_LIBRARY_PATH=../assets
-for num_escrows in 3 11 19; do
+for num_escrows in 3; do # 11 19; do
     # Setup the servers
     wait_pids=
     base=`python -c 'import random; print(random.randint(8000,50000))'`
     echo $base
     for (( i=0; $i < $num_escrows; ++i )); do
-        python setup-servers.py $base $i &
+        python setup-servers.py -b $base -i $i -p $parallelism -n $num_escrows &
         wait_pids="$wait_pids $!"
     done
     wait $wait_pids
-    sleep 10
     echo "Server setup complete ================================================="
+
+    if [[ -d keydir ]]; then
+        trash keydir
+    fi
+    mkdir keydir
 
     # Run the clients
     for delay in 1 50 150; do
         queue_length=`awk "BEGIN{print int($tpt * 1e6 * $delay * 2e-3 / 8 + 0.5);}"`
         echo $queue_length
         set_netem $tpt $delay 0 $queue_length
-        python run-client.py -c server-addrs-0.pkl -m register -d keydir -n 30 --no-prime >$output_dir/reg-$num_escrows-$delay-$tpt-$parallelism 2>&1
+        python run-client.py -c server-addrs-0.pkl -m register -d keydir -n 7 --no-prime >$output_dir/reg-$num_escrows-$delay-$tpt-$parallelism 2>&1
         echo "Registration complete ================================================="
-        python run-client.py -c server-addrs-0.pkl -m file -d keydir -n 100 --prime >$output_dir/file-$num_escrows-$delay-$tpt-$parallelism 2>&1
+        python run-client.py -c server-addrs-0.pkl -m file -d keydir -n 10 --prime >$output_dir/file-$num_escrows-$delay-$tpt-$parallelism 2>&1
         echo "Filing complete ================================================="
     done
     pkill -9 java
@@ -67,7 +71,4 @@ for num_escrows in 3 11 19; do
         sql_str="$sql_str DROP DATABASE escrow$i;"
     done
     echo $sql_str | mysql -u root -ppassword
-    #trash keydir
-    #mkdir keydir
-    exit
 done
