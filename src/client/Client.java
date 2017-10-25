@@ -141,11 +141,14 @@ public class Client {
                 byte[][] expShareBytes = (byte[][])inStreams[i].readObject();
                 expShares[serverIndices[i]] = new Element[expShareBytes.length];
                 for (int j = 0; j < expShareBytes.length; ++j) {
-                    expShares[serverIndices[i]][j] = PedersonShare.group.newOneElement();
+                    if (j < 2)
+                        expShares[serverIndices[i]][j] = PedersonShare.groupG1.newOneElement();
+                    else
+                        expShares[serverIndices[i]][j] = PedersonShare.group.newOneElement();
                     expShares[serverIndices[i]][j].setFromBytes(expShareBytes[j]);
                 }
             }
-            macs[t] = PedersonComm.plaintextExponentiateRecv(expShares, numServers / 2, numServers);
+            macs[t] = PedersonComm.plaintextBilinearExponentiateRecv(expShares, numServers / 2, numServers);
         }
 
         // Write to file
@@ -189,9 +192,9 @@ public class Client {
             return;
         }
 
-        PedersonShare[] ticketShares = PedersonShare.shareValue(file.tickets[file.numUsed],
-                                                                numServers/2,
-                                                                numServers);
+        // PedersonShare[] ticketShares = PedersonShare.shareValue(file.tickets[file.numUsed],
+        //                                                         numServers/2,
+        //                                                         numServers);
         PedersonShare[] metaDataShares = PedersonShare.shareValue(metaData,
                                                                   numServers/2,
                                                                   numServers);
@@ -203,7 +206,8 @@ public class Client {
         for (int i = 0; i < numServers; ++i) {
             int serverIndex = (int)inStreams[i].readObject();
             outStreams[i].writeObject(new String("Allege"));
-            outStreams[i].writeObject(ticketShares[serverIndex]);
+            //outStreams[i].writeObject(ticketShares[serverIndex]);
+            outStreams[i].writeObject(file.tickets[file.numUsed]);
             outStreams[i].writeObject(file.macs[file.numUsed]);
             outStreams[i].writeObject(metaDataShares[serverIndex]);
             outStreams[i].writeObject(revealThreshold);

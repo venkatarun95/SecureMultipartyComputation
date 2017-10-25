@@ -47,6 +47,6 @@ public class BonehBoyenSign {
 				BigInteger blindInverted = revealed.modInverse(PedersonShare.modQ);
 				PedersonShare revealedShare = PedersonShare.shareConstValue(blindInverted, threshold, channels.length)[msg.getIndex()-1];
 				PedersonShare inverted = PedersonComm.multiply(revealedShare, blind, channels);
-        Element res = PedersonComm.publicBilinearExponentiate(inverted, channels);
+        Element res = PedersonComm.plaintextBilinearExponentiate(inverted, channels);
 		}
 }

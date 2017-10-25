@@ -110,8 +110,9 @@ public class Server {
                     }
                 }
                 else if(action.equals("Allege")) {
-                    PedersonShare ticketShare = (PedersonShare)inStream.readObject();
-                    Element claimedMac = PedersonShare.group.newOneElement();
+                    //PedersonShare ticketShare = (PedersonShare)inStream.readObject();
+                    BigInteger ticket = (BigInteger)inStream.readObject();
+                    Element claimedMac = PedersonShare.groupG1.newOneElement();
                     claimedMac.setFromBytes((byte[])inStream.readObject());
                     PedersonShare metaDataShare = (PedersonShare)inStream.readObject();
                     int revealThreshold = (int)inStream.readObject();
@@ -119,12 +120,11 @@ public class Server {
                     byte[] textCrypt = (byte[])inStream.readObject();
 
                     // Calculate mac and verify claimedMac is correct
-                    Element mac = idMacPRF.compute(ticketShare, channels);
-                    boolean identityVerified = mac.isEqual(claimedMac);
+                    boolean identityVerified = idMacPRF.verify(ticket, claimedMac);
 
                     // Verify that this ticket hasn't been used before
                     ResultSet numMatchingTickets = dbStatement.executeQuery("SELECT count(identifier) FROM Allegations WHERE identifier='"
-                                                                            + encodeToBase64(mac.toBytes()) + "'");
+                                                                            + encodeToBase64(claimedMac.toBytes()) + "'");
                     numMatchingTickets.next();
                     if (numMatchingTickets.getInt("count(identifier)") > 0) {
                         identityVerified = false;
@@ -149,7 +149,7 @@ public class Server {
                         collId = matching.getString("identifier"); // Identifier of an allegation in the matching collection
                     int curBucket = revealThreshold-1;
                     dbStatement.executeUpdate("INSERT INTO Allegations(identifier, prf, bucket, threshold, textShare, textCrypt) VALUES('"
-                                              + encodeToBase64(mac.toBytes())
+                                              + encodeToBase64(claimedMac.toBytes())
                                               + "', '" + encodeToBase64(prf.toBytes())
                                               + "', " + curBucket
                                               + ", " + revealThreshold
@@ -170,7 +170,7 @@ public class Server {
                             //if (matching.first()) {
                             -- curBucket;
                             dbStatement.executeUpdate("INSERT INTO Allegations(identifier, prf, bucket, threshold, textShare, textCrypt) VALUES('"
-                                                      + encodeToBase64(mac.toBytes())
+                                                      + encodeToBase64(claimedMac.toBytes())
                                                       + "', '" + collPRF
                                                       + "', " + curBucket
                                                       + ", " + revealThreshold
@@ -407,6 +407,7 @@ public class Server {
         if (!configTableExists) {
             System.out.println("Initializing database");
             idMacPRF = new PRF(channels.length / 2, channels);
+            //System.out.println("idMacPRF initialized");
             idRevealPRF = new PRF(channels.length / 2, channels);
 
             dbStatement.executeUpdate("CREATE TABLE Config(name CHAR(20) PRIMARY KEY, intVal INT, charVal VARCHAR(4000))");
