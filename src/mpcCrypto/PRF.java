@@ -14,18 +14,21 @@ import pederson.PedersonShare;
 import pederson.PedersonComm;
 
 /**
- * Class for PRF computation in a multi-party setting. Needs
- * <code>PedersonShare</code> to use a group that satisfies the
- * q-DBDHI (q-Decisional Bilinear Diffie Hellman Inversion)
+ * Class for VPRF (verifiable pseudo-random function) computation in a
+ * multi-party setting. Needs <code>PedersonShare</code> to use a group that
+ * satisfies the q-DBDHI (q-Decisional Bilinear Diffie Hellman Inversion)
  * assumption.
  */
 public class PRF implements Serializable {
 		PedersonShare key;
+    // For verifying the VPRF
+    Element publicKey;
 		int threshold;
 
 		public PRF(int a_threshold, Channel[] channels) throws IOException {
 				threshold = a_threshold;
 				key = PedersonComm.shareRandomNumber(threshold, channels);
+        publicKey = PedersonComm.plaintextBilinearExponentiate(key, channels);
 		}
 
 		/**
@@ -54,7 +57,7 @@ public class PRF implements Serializable {
 		 */
 		public Element compute(PedersonShare val, Channel[] channels) throws IOException {
 				PedersonShare inverted = computeExponent(val, channels);
-				return PedersonComm.plaintextExponentiate(inverted, channels);
+				return PedersonComm.plaintextBilinearExponentiate(inverted, channels);
 		}
 
     /**
@@ -67,6 +70,38 @@ public class PRF implements Serializable {
      */
     public Element[] computeSend(PedersonShare val, Channel[] channels) throws IOException {
         PedersonShare inverted = computeExponent(val, channels);
-        return PedersonComm.plaintextExponentiateSend(inverted, channels.length);
+        return PedersonComm.plaintextBilinearExponentiateSend(inverted, channels.length);
+    }
+
+    /**
+     * For PRFs computed with this private key, verify if the PRF of
+     * <code>val</code> is <code>prf</code>. This computation is done locally
+     * without any MPC.
+     */
+    public boolean verify(BigInteger val, Element prf) {
+        Element g_to_x_plus_key = PedersonShare.genDataG1_pp.pow(val);
+        g_to_x_plus_key.mul(publicKey);
+        PedersonShare.pairing.pairing(g_to_x_plus_key, prf);
+        Element check = PedersonShare.genData;
+        return g_to_x_plus_key.isEqual(check);
+    }
+
+    /**
+		 * Write custom serialization method so we can handle
+		 * <code>Element</code> which does not implement
+		 * <code>Serializable</code>.
+		 *
+		 * Remember to update any new class members here.
+		 */
+		private void writeObject(java.io.ObjectOutputStream stream) throws IOException {
+        stream.writeObject(key);
+        stream.writeObject(publicKey.toBytes());
+        stream.writeObject(threshold);
+    }
+
+    private void readObject(java.io.ObjectInputStream stream) throws IOException, ClassNotFoundException {
+        key = (PedersonShare)stream.readObject();
+        publicKey = PedersonShare.group.newElementFromBytes((byte[])stream.readObject());
+        threshold = (int)stream.readObject();
     }
 }
