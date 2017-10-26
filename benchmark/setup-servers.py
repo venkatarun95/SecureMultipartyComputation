@@ -48,8 +48,8 @@ def recvstr(socket):
     return msg
 
 def error_exit(msg=''):
-    close_sockets()
     print("Fatal error. Exiting\n%s" % msg)
+    close_sockets()
     exit(1)
 
 def init_params():
@@ -72,7 +72,7 @@ def setup_sockets():
     sockets = {}
     num_success_conns = 0
     listensocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    listensocket.bind(config['this_addr'])
+    listensocket.bind(('0.0.0.0', config['this_addr'][1]))
     listensocket.listen(2 * len(config['other_addr']))
     try:
         while params['id'] > num_success_conns:
@@ -80,6 +80,7 @@ def setup_sockets():
             other_addr = recvstr(newsocket)
             sockets[tuple(json.loads(other_addr))] = newsocket
             num_success_conns += 1
+            print("Connection from %s" % str(newsocketaddr))
     except Exception as e:
         listensocket.close()
         error_exit("Error listening for connections from setup scripts\n%s" % e)
@@ -93,6 +94,7 @@ def setup_sockets():
             newsocket.connect(params['addrs'][num_success_conns])
             sendstr(newsocket, json.dumps(config['this_addr']))
             sockets[params['addrs'][num_success_conns]] = newsocket
+            print("Connected to %s" % str(params['addrs'][num_success_conns]))
             num_success_conns += 1
     except Exception as e:
         newsocket.close()
@@ -137,7 +139,7 @@ def start_servers():
     for replica in range(config['parallelism']):
         i = 0
         ips, ports = '', ''
-        ips += "IP%d = %s\n" % (i, params['replica_addrs'][replica][0])
+        ips += "IP%d = 0.0.0.0\n" % (i)
         ports += "Port%d = %d\n" % (i, params['replica_addrs'][replica][1])
         for peer in config['other_addr']:
             ips += "IP%d = %s\n" % (i+1, params['other_replica_addrs'][peer][replica][0])
@@ -231,8 +233,8 @@ def parse_args():
             if i == id: continue
             config['other_addr'] += [("127.0.0.1", base_port + i)]
     else:
-        config['this_addr'] = json.loads(args.addr)
-        config['other_addr'] = json.loads(args.other_addr)
+        config['this_addr'] = tuple(json.loads(args.addr))
+        config['other_addr'] = map(tuple, json.loads(args.other_addr))
 
 if __name__ == "__main__":
     parse_args()
