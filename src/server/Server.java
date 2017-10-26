@@ -56,6 +56,7 @@ public class Server {
         }
         catch(Exception e) {
             System.out.println("Error connecting to database. " + e.getMessage());
+            e.printStackTrace(System.out);
             return;
         }
 
@@ -340,7 +341,7 @@ public class Server {
 				Arrays.sort(parties, new Comparator<SocketPartyData>() {
 								@Override
 								public int compare(SocketPartyData o1, SocketPartyData o2) {
-										return o1.compareTo(o2);
+										return o1.getPort() < o2.getPort() ? -1 : (o1.getPort() == o2.getPort() ? 0 : 1);
 								}
 						});
 				channels = new Channel[parties.length];
@@ -405,14 +406,15 @@ public class Server {
             }
         }
         if (!configTableExists) {
-            System.out.println("Initializing database");
+            System.out.println("Initializing database.");
             idMacPRF = new PRF(channels.length / 2, channels);
-            //System.out.println("idMacPRF initialized");
             idRevealPRF = new PRF(channels.length / 2, channels);
+            System.out.println("PRFs initialized");
 
             dbStatement.executeUpdate("CREATE TABLE Config(name CHAR(20) PRIMARY KEY, intVal INT, charVal VARCHAR(4000))");
             dbStatement.executeUpdate("INSERT INTO Config(name, intVal) VALUES('thisPartyId', '" + thisPartyId + "')");
             dbStatement.executeUpdate("INSERT INTO Config(name, charVal) VALUES('idMacPRF', '" + encodeToBase64(idMacPRF) + "')");
+            System.out.println("MacPRF written to db");
             dbStatement.executeUpdate("INSERT INTO Config(name, charVal) VALUES('idRevealPRF', '" + encodeToBase64(idRevealPRF) + "')");
 
             // TODO(venkat): make appropriate fields 'not null'
