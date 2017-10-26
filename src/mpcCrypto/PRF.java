@@ -78,12 +78,11 @@ public class PRF implements Serializable {
      * <code>val</code> is <code>prf</code>. This computation is done locally
      * without any MPC.
      */
-    public boolean verify(BigInteger val, Element prf) {
+    public boolean verify(BigInteger val, Element prf) throws IOException {
         Element g_to_x_plus_key = PedersonShare.genDataG1_pp.pow(val);
         g_to_x_plus_key.mul(publicKey);
-        PedersonShare.pairing.pairing(g_to_x_plus_key, prf);
-        Element check = PedersonShare.genData;
-        return g_to_x_plus_key.isEqual(check);
+        Element check = PedersonShare.pairing.pairing(g_to_x_plus_key, prf);
+        return check.isEqual(PedersonShare.genData);
     }
 
     /**
