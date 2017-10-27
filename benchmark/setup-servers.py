@@ -55,7 +55,7 @@ def error_exit(msg=''):
 def init_params():
     # Sort the addresses in lexicographic order to find id
     addrs = [config['this_addr']] + config['other_addr']
-    addrs.sort()
+    addrs.sort(cmp=lambda x,y: ((-1, 1)[x[1]>y[1]], 0)[x[1]==y[1]])
     params['addrs'] = addrs
     params['id'] = addrs.index(config['this_addr'])
     # Pick some random ports. If any of them isn't available, setup will fail
