@@ -9,8 +9,9 @@ if [[ $1 == "install" ]]; then
     # set variable eid to this escrow's id between 1 and n
     git clone git@github.com:venkatarun95/SecureMultipartyComputation
     sudo apt-get update
-    sudo apt-get install default-jdk libmysql-java libssl1.0.0 libssl-dev mysql-server python
+    sudo apt-get install -y default-jdk libmysql-java libssl1.0.0 libssl-dev mysql-server python
     echo "export LD_LIBRARY_PATH=/home/ubuntu/SecureMultipartyComputation/assets:$LD_LIBRARY_PATH" >>~/.bashrc
+    source ~/.bashrc
     cd SecureMultipartyComputation/src
     echo "CREATE USER escrow$eid IDENTIFIED BY 'e$eid'; GRANT ALL PRIVILEGES ON *.* to escrow$eid;" | mysql -u root -ppassword
     ./compile
@@ -28,7 +29,7 @@ elif [[ $1 == "setup" ]]; then
     machines=$3
     parallelism=$4
     #machines='"52.91.191.177" "52.221.251.241" "35.177.138.132"'
-    i=0
+    i=1
     this_addr=
     other_addr="["
     for x in $machines; do
@@ -37,15 +38,14 @@ elif [[ $1 == "setup" ]]; then
         if [[ $i == $eid ]]; then
             this_addr=$addr
         else
-            other_addr="$other_addr $this_addr, "
+            other_addr="$other_addr $addr, "
         fi
         i=$(( $i + 1 ))
     done
     other_addr="$other_addr]"
-    other_addr=`python -c "import json; print(json.dumps($other_addr))"`
     echo $this_addr " - " $other_addr
+    other_addr=`python -c "import json; print(json.dumps($other_addr))"`
 
-    echo "drop database escrow$eid; show databases;" | mysql -u root -ppassword
     ./setup-servers.py --remote -p $parallelism -a "$this_addr" -o "$other_addr"
 
     # Running
@@ -53,4 +53,10 @@ elif [[ $1 == "setup" ]]; then
     # ./setup-servers.py --remote -p 1 -a '["35.177.75.79", 8003]' -o '[["128.52.160.213", 8001], ["54.255.211.76", 8002]]'
     # ./setup-servers.py --remote -p 1 -a '["54.255.211.76", 8002]' -o '[["128.52.160.213", 8001], ["35.177.75.79", 8003]]'
     # ./setup-servers.py --remote -p 1 -a '["128.52.160.213", 8001]' -o '[["54.255.211.76", 8002], ["35.177.75.79", 8003]]'
+
+elif [[ $1 == "reset_db" ]]; then
+    echo "drop database escrow$eid; show databases;" | mysql -u root -ppassword
+
+else
+    echo "Unrecognized command '$1'"
 fi
