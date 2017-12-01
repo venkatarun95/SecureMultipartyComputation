@@ -128,6 +128,7 @@ class RunClient (threading.Thread):
 
             req_start_time = time.time()
             cmd = ['java', '-classpath', config['classpath'],
+                   '-Djava.net.preferIPv4Stack=true',
                    '-Djava.library.path=%s' % config['lib_path'],
                    'client.Client', addr_str] + args
             #print(' '.join(cmd))
