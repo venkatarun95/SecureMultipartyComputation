@@ -94,7 +94,7 @@ class RunClient (threading.Thread):
         res = []
         while len(res) < num_alleg:
             thresh = random.expovariate(1.0 / 5.0)
-            thresh = max(min(int(thresh), 20), 2)
+            thresh = max(min(int(thresh), 19), 2)
             num_copies = thresh
             if random.random() < 0.5:
                 num_copies -= 1
@@ -129,6 +129,7 @@ class RunClient (threading.Thread):
             req_start_time = time.time()
             cmd = ['java', '-classpath', config['classpath'],
                    '-Djava.net.preferIPv4Stack=true',
+                   '-Djava.security.egd=file:/dev/./urandom',
                    '-Djava.library.path=%s' % config['lib_path'],
                    'client.Client', addr_str] + args
             #print(' '.join(cmd))
@@ -143,13 +144,17 @@ class RunClient (threading.Thread):
         servers. Helps avoid race-conditions later
         '''
         addr_str = '::'.join(['%s:%d' % (x[0], x[1]) for x in params['server_addrs'][0]])
-        for thresh in range(2, max_bucket):
+        for thresh in range(1, max_bucket):
             key_filename = self.__get_keyfile()
             args = ['file', key_filename, str(thresh), '1', 'priming-allegation']
+            req_start_time = time.time()
             cmd = ['java', '-classpath', config['classpath'],
+                   '-Djava.net.preferIPv4Stack=true',
                    '-Djava.library.path=%s' % config['lib_path'],
                    'client.Client', addr_str] + args
             subprocess.call(cmd)
+            req_elapsed_time = time.time() - req_start_time
+            print("PERF REPID %d THRESH %d LAT %f" % (self.replica_id, thresh, req_elapsed_time))
 
 if __name__ == "__main__":
     init_params()

@@ -9,7 +9,7 @@ if [[ $1 == "install" ]]; then
     # set variable eid to this escrow's id between 1 and n
     git clone git@github.com:venkatarun95/SecureMultipartyComputation
     sudo apt-get update
-    sudo apt-get install -y default-jdk libmysql-java libssl1.0.0 libssl-dev mysql-server python
+    sudo apt-get install -y default-jdk libmysql-java libssl1.0.0 libssl-dev mysql-server python rng-tools
     echo "export LD_LIBRARY_PATH=/home/ubuntu/SecureMultipartyComputation/assets:$LD_LIBRARY_PATH" >>~/.bashrc
     source ~/.bashrc
     cd SecureMultipartyComputation/src
