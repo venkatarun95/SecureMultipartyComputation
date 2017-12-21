@@ -365,6 +365,7 @@ public class Server {
         dbStatement = dbConnect.createStatement();
         dbStatement2 = dbConnect.createStatement();
 
+        dbname = "escrow" + (thisPartyId + 1);
         // Use database if present. Else create
         ResultSet databases = dbStatement.executeQuery("SHOW DATABASES");
         boolean databaseExists = false;
