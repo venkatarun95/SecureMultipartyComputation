@@ -132,7 +132,6 @@ class RunClient (threading.Thread):
                    '-Djava.security.egd=file:/dev/./urandom',
                    '-Djava.library.path=%s' % config['lib_path'],
                    'client.Client', addr_str] + args
-            #print(' '.join(cmd))
             subprocess.call(cmd)
             req_elapsed_time = time.time() - req_start_time
             tot_elapsed_time = time.time() - start_time
@@ -144,7 +143,7 @@ class RunClient (threading.Thread):
         servers. Helps avoid race-conditions later
         '''
         addr_str = '::'.join(['%s:%d' % (x[0], x[1]) for x in params['server_addrs'][0]])
-        for thresh in range(1, max_bucket):
+        for thresh in range(2, max_bucket):
             key_filename = self.__get_keyfile()
             args = ['file', key_filename, str(thresh), '1', 'priming-allegation']
             req_start_time = time.time()
