@@ -94,10 +94,11 @@ class RunClient (threading.Thread):
         res = []
         while len(res) < num_alleg:
             thresh = random.expovariate(1.0 / 5.0)
-            thresh = max(min(int(thresh), 19), 2)
-            num_copies = thresh
-            if random.random() < 0.5:
-                num_copies -= 1
+            thresh = max(min(int(thresh), 4), 2)
+            # num_copies = thresh
+            # if random.random() < 0.5:
+            #     num_copies -= 1
+            num_copies = 1
             meta_data = random.randint(0, 1000000)
             res += [(thresh, meta_data, random.randint(0, 1000)) for _ in range(num_copies)]
         random.shuffle(res)
@@ -163,7 +164,7 @@ if __name__ == "__main__":
         clients.append(client)
 
     if params['prime'] and params['mode'] == 'file':
-        clients[0].prime_buckets(20)
+        clients[0].prime_buckets(5)
     for client in clients:
         client.start()
 

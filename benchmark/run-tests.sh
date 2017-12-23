@@ -54,16 +54,17 @@ for num_escrows in 3; do # 11 19; do
     mkdir keydir
 
     # Run the clients
-    for delay in 1 50 150; do
+    for delay in 0 5 10 20 40 80 160; do
         queue_length=`awk "BEGIN{print int($tpt * 1e6 * $delay * 2e-3 / 8 + 0.5);}"`
         echo $queue_length
         set_netem $tpt $delay 0 $queue_length
-        python run-client.py -c server-addrs-0.pkl -m register -d keydir -n 7 --no-prime >$output_dir/reg-$num_escrows-$delay-$tpt-$parallelism 2>&1
+        python run-client.py -c server-addrs-0.pkl -m register -d keydir -n 1 --no-prime >$output_dir/reg-$num_escrows-$delay-$tpt-$parallelism 2>&1
         echo "Registration complete ================================================="
-        python run-client.py -c server-addrs-0.pkl -m file -d keydir -n 10 --prime >$output_dir/file-$num_escrows-$delay-$tpt-$parallelism 2>&1
+        python run-client.py -c server-addrs-0.pkl -m file -d keydir -n 5 --no-prime >$output_dir/file-$num_escrows-$delay-$tpt-$parallelism 2>&1
         echo "Filing complete ================================================="
     done
-    pkill -9 java
+    pkill -9 -f java
+    pkill -9 -f python
 
     # Delete the databases
     sql_str=""
