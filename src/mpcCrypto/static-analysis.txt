@@ -7,12 +7,12 @@ Notation:
 
 PedersonShare::computeMac
  - k group exponentiations
- - 2k group multiplications
+ - k non-precomputed group multiplications
 
 PedersonShare::validate
  > 1 PedersonShare::computeMac
- - k+2 group exponentiations
- - 2k+1 group multiplications
+ - k+2 non-preprocessed group exponentiations
+ - k+1 group multiplications
 
 PedersonShare::evaluatePolynomial
  - k Z_p additions
@@ -26,24 +26,27 @@ PedersonShare::constMultiply
  - k group exponentiations
  - 2 Z_p multiplications
 
+PedersonShare::verifyCommitmentEquality
+None
+
 PedersonShare::shareValue
  > n PedersohShare::evaluatePolynomial
  - 2k group exponentiations
  - k group multiplications
- - 2k Z_p random choices
- - nk Z_p additions
- - 2nk Z_p multiplications
+ - 2k Z_p modQ random choices
+ - 2nk Z_p additions
+ - 4nk Z_p multiplications
 
 PedersonShare::shareConstValue
  > n PedersohShare::evaluatePolynomial
  - 2k group exponentiations
  - k group multiplications
- - nk Z_p additions
- - 2nk Z_p multiplications
+ - 2nk Z_p additions
+ - 4nk Z_p multiplications
 
 PedersonShare::combineShares
  > 1 PedersonShare::validate
- - k+2 group exponentiations
+ - k+2 non-preprocessed group exponentiations
  - 2k+1 group multiplications
  - 2k*k Z_p multiply
  - k Z_p add
@@ -57,15 +60,15 @@ PedersonMultiply::sharedPoly
  - 2k group exponentiations
  - k group multiplications
  - 2k Z_p random choices
- - nk Z_p additions
- - 2nk Z_p multiplications
+ - 2nk Z_p additions
+ - 4nk+1 Z_p multiplications
 
 PedersonMultiply::zkpProverStep1
  > 1 PedersonShare::computeMac
- - 1+(k) group exponentiations
- - 1 no-preprocessed group exponentiation
- - 3+(2k) group multiplications
- - 5 Z_p random choices
+ - 5 group exponentiations
+ - 1+(k) non-preprocessed group exponentiation
+ - 3+(k) group multiplications
+ - 5 Z_p modQ random choices
 
 PedersonMultiply::zkpProverStep2
  - k(k-1)+6 Z_p multiplications
@@ -74,15 +77,24 @@ PedersonMultiply::zkpProverStep2
 
 PedersonMultiply::verifyProof
  > 2 PedersonShare::computeMac
- - 5+(2k) group exponentiations
- - 3 non-preprocessed group exponentiations
- - 6+(4k) group multiplications
+ - 5 group exponentiations
+ - 4+(2k) non-preprocessed group exponentiations
+ - 5+(2k) group multiplications
 
 
 
 PedersonComm::verifyCommitmentEquality
  - n-1 send
  - n-1 recv
+
+PedersonComm::coinTossCommit
+ - modQ * n random choices
+ - n-1 send
+ - n-1 recv
+
+PedersonComm::coinTossDecommit
+ - 2(n-1) send
+ - 2(n-1) recv
 
 PedersonComm::shareSender
  > PedersonComm::verifyCommitmentEquality
@@ -92,8 +104,8 @@ PedersonComm::shareSender
 PedersonComm::shareReceiver
  > PedersonShare::validate
  > PedersonComm::verifyCommitmentEquality
- - k+2 group exponentiations
- - 2k+1 group multiplications
+ - k+2 non-preprocessed group exponentiations
+ - k+1 group multiplications
  - (n-1) send
  - (n-1)+1 recv
 
@@ -113,7 +125,7 @@ PedersonComm::shareRandomNumber
 Summary:
  - kn+k+2n-2 group exponentiations
  - 4kn-k+n-1 group multiplications
- - 2k Z_p random choices
+ - 2k ModQ random choices
  - nk+2n Z_p additions
  - 2nk Z_p multiplications
  - n*n-1 send
@@ -121,60 +133,68 @@ Summary:
 
 PedersonComm::combineShares
  > PedersonShare::combineShares
- - k+2 group exponentiations
- - 2k+1 group multiplications
- - k Z_p add
- - 2k*k Z_p multiply
- - (n-1) send
- - (n-1) receive
+ - (k+2) non-preprocessed group exponentiations
+ - (2k+1) group multiplications
+ - (k) Z_p add
+ - (2k*k) Z_p multiply
+ - n-1 send
+ - n-1 receive
 
 PedersonComm::multiply
- > 1 PedersonComm:shareSender
+ > 1 PedersonMultiply::sharedPoly
+ > 1 PedersonComm::shareSender
  > n-1 PedersonComm::shareReceiver
- > 1 coinTossCommit/coinTossDecommit (ignoring)
+ > 1 PedersonComm::coinTossCommit
  > 1 PedersonMultiply::zkpProverStep1
+ > 1 PedersonComm::coinTossDecommit
  > 1 PedersonMultiply::zkpProverStep2
- > 1 PedersonMultiply::verifyProof
- > t PedersonShare::constMultiply
- > t PedersonShare::add
- - (n-1)(k+2)+(1+k)+(5+2k) group exponentiations
- - (1)+(3) non-preprocessed group exponentiations
- - (n-1)(2k+1)+(3+2k)+(6+4k) group multiplications
- - (5) Z_p random choices
- - (k(k-1)+6) Z_p multiplications
- - (k(k-1)/2+6) Z_p additions
- - k(k-1)/2 Z_p inversions
- - 2(n-1)+(2(n-1))+((n-1)(n-1)) send
- - 2(n-1)+(n-1)+((n-1)n) recv
+ > (n-1) PedersonMultiply::verifyProof
+ > n PedersonShare::constMultiply
+ > n-1 PedersonShare::add
+ - 2(n-1)+(2(n-1))+(n^2+2n-1)+(n-1)+(2(n-1)) send
+ - 2(n-1)+(n-1)+(n^2-1)+(n-1)+(2(n-1)) recv
+ - (2k)+(5)+(5n-5)+(kn)+(kn) group exponentiations
+ - (kn-k+2n-2)+(k+1)+(2kn-2k+4n-4) non-preprocessed group exponentiations
+ - (k)+(kn-k+n-1)+(k+3)+(2kn-2k+5n-5) group multiplications
+ - (2k Z_p) + (modQ * n) + (5 modQ) random choices
+ - (2nk)+(k^2/2-k/2+6) Z_p additions
+ - (4nk+1)+(k^2-k+6)+(2n)+(2n) Z_p multiplications
+ - (k^2/2-k/2) Z_p inversions
 Summary:
- - nk+2n+2k+4 group exponentiations
- - 4 non-preprocessed group exponentiations
- - 2kn+4k+n+8 group multiplications
- - 5 Z_p random choices
- - k(k-1)+6 Z_p multiplications
- - k(k-1)/2+6 Z_p additions
- - k(k-1)/2 Z_p inversions
- - n*n+2n-3 send
- - n*n+2n-3 recv
+ - n^2+9n-8 send
+ - n^2+6n-7 recv
+ - 2kn+5n+2k group exponentiations
+ - 3kn+6n-2k-5 non-preprocessed group exponentiations
+ - 3kn+6n-k-6 group multiplications
+ - (n + 2k + 5) modQ random choices
+ - k^2/2+2nk-k/2+6 Z_p additions
+ - k^2+4nk+4n-k+7 Z_p multiplications
+ - k^2/2-k/2 Z_p inversions
 
 PedersonComm::plaintextExponentiate
  > (n-1) PedersonShare::computeMac
  - 2+k+((n-1)k) group exponentiations
- - n-1+k+((n-1)2k) group multiplications
- - 2k*k Z_p multiplications
- - k*k Z_p inversions
+ - n-1+k+((n-1)k) group multiplications
+ - 2k*(k-1) Z_p multiplications
+ - k*(k-1) Z_p inversions
  - 2(n-1) send
  - 2(n-1) recv
 
-PedersonComm:plaintextBilinearExponentiate
+PedersonComm::plaintextBilinearExponentiate
  > (n-1) PedersonShare::computeMac
- - (n-1) bilinear pairing computations
- - 2+k+((n-1)k) group exponentiations
- - n-1+k+((n-1)2k) group multiplications
- - 2k*k Z_p multiplications
- - k*k Z_p inversions
- - 2(n-1) send
- - 2(n-1) recv
+ - 2 group exponentiations
+ - (n-1) send
+ - (n-1) recv
+ - 2(n-1) bilinear pairings
+ - 2(n-1)+((n-1)k) group multiplications
+ - (n-1)+((n-1)k) non-precomputed group exponentiations
+ - 2k(k-1) Z_p multiplications
+ - k(k-1) Z_p inversions
+
+PedersonComm::plaintextBilinearExponentiateSend
+ > n PedersonShare::computeMac
+ - nk+2 group exponentiations
+ - nk group multiplications
 
 
 
@@ -182,29 +202,57 @@ PRF::compute
  > 1 PedersonShare::add
  > 1 PedersonComm::shareRandomNumber
  > 1 PedersonComm::combineShares
- > 1 PedersonShare::shareConstValue
  > 2 PedersonComm::multiply
- - (kn+k+2n-2)+(k+1)+(2k)+2(nk+2n+2k+4) group exponentiations
- - 2(4) non-preprocessed group exponentiations
- - (k)+(4kn-k+n-1)+(2k+1)+(k)+2(2kn+4k+n+8) group multiplications
- - (5)+2(2k) Z_p random choices
- - (2)+(nk+2n)+(k)+(nk)+2(k(k-1)/2+6) Z_p additions
- - (2nk)+(2k*k)+(2nk)+2(k(k-1)+6) Z_p multiplications
- - 1+2(k(k-1)/2) Z_p inversions
- - (n*n-1)+(n-1)+2(n*n+2n-3) send
- - (n*n-1)+(n-1)+2(n*n+2n-3) recv
+ > 1 PedersonShare::shareConstValue
+ > 1 PedersonComm::plaintextBilinearExponentiate
+ - 0+(n-1)+(n^2+9n-8)+0+(n-1) send
+ - 0+(n-1)+(n^2+6n-7)+0+(n-1) recv
+ - 0+(kn+k+2n-2)+(2kn+5n+2k)+(2k)+(2) group exponentiations
+ - 0+0+(3kn+6n-2k-5)+0+(kn+n-k-1) non-precomputed group exponentiations
+ - (k)+(4kn-k+n-1)+(3kn+6n-k-6)+(k)+(kn+2n-k-2) group multiplications
+ - 0+(2k)+(n + 2k + 5)+0+0 modQ random choices
+ - (2)+(nk+2n)+(k^2/2+2nk-k/2+6)+(2nk)+0 Z_p additions
+ - 0+(2nk)+(k^2+4nk+4n-k+7)+(4nk)+(2k^2-2k) Z_p multiplications
+ - 1+0+(k^2/2-k/2)+0+(k^2-k) Z_p inversions
+ - 2(n-1) bilinear pairings
 Summary:
- - 3kn+8k+6n+7 group exponentiations
- - 8 non-preprocessed group exponentiations
- - 8kn+11k+3n+16 group multiplications
- - 5+4k Z_p random choices
- - k*k+2kn+2n+14 Z_p additions
- - 4*k*k+4kn-2k+12 Z_p multiplications
- - 1+k(k-1) Z_p inversions
- - 3*n*n+5n-8 send
- - 3*n*n+5n-8 recv
+ - n^2+11n-10 send
+ - n^2+8n-9 recv
+ - 3kn+7n+5k group exponentiations
+ - 4kn+7n-3k-6 non-precomputed group exponentiations
+ - 8kn+9n-k-9 group multiplications
+ - n+4k+5 modQ random choices
+ - k^2/2+5nk+2n-k/2+8 Z_p additions
+ - 3k^2+10nk+4n-3k+7 Z_p multiplications
+ - 3k^2/2-3k/2+1 Z_p inversions
+ - 2n-2 bilinear pairings
 
-
+PRF::computeSend
+ > 1 PedersonShare::add
+ > 1 PedersonComm::shareRandomNumber
+ > 1 PedersonComm::combineShares
+ > 2 PedersonComm::multiply
+ > 1 PedersonShare::shareConstValue
+ > 1 PedersonComm::plaintextBilinearExponentiate
+ - 0+(n-1)+(n^2+9n-8)+0+0 send
+ - 0+(n-1)+(n^2+6n-7)+0+0 recv
+ - 0+(kn+k+2n-2)+(2kn+5n+2k)+(2k)+(nk+2) group exponentiations
+ - 0+0+(3kn+6n-2k-5)+0+0 non-precomputed group exponentiations
+ - (k)+(4kn-k+n-1)+(3kn+6n-k-6)+(k)+(nk) group multiplications
+ - 0+(2k)+(n + 2k + 5)+0+0 modQ random choices
+ - (2)+(nk+2n)+(k^2/2+2nk-k/2+6)+(2nk)+0 Z_p additions
+ - 0+(2nk)+(k^2+4nk+4n-k+7)+(4nk)+0 Z_p multiplications
+ - 1+0+(k^2/2-k/2)+0+0 Z_p inversions
+Summary:
+ - n^2+10n-9 send
+ - n^2+7n-8 recv
+ - 4kn+7n+5k group exponentiation
+ - 3kn+6n-2k-5 non-precomputed group exponentiations
+ - 8kn+7n-7 group multiplications
+ - n+4k+5 modQ random choices
+ - k^2/2+5nk+2n-k/2+8 Z_p additions
+ - k^2+10nk+4n-k+7 Z_p multiplications
+ - k^2/2-k/2+1 Z_p inversions
 
 BonehBoyenSign::compute
  > 2 PedersonShare::add
