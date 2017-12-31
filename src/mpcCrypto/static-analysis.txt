@@ -254,6 +254,12 @@ Summary:
  - k^2+10nk+4n-k+7 Z_p multiplications
  - k^2/2-k/2+1 Z_p inversions
 
+PRF::verify
+ - 1 group exponentiation
+ - 1 group multiplication
+ - 1 bilinear pairing
+
+# Deprecated
 BonehBoyenSign::compute
  > 2 PedersonShare::add
  > 2 PedersonComm::shareRandomNumber
@@ -288,21 +294,33 @@ Summary
 
 ========================== ROUND COMPLEXITY ==========================
 
+PedersonComm::shareSender/shareReceiver together
+ > 1 PedersonComm::verifyCommitmentEquality
+ - 2 round
+
 PedersonComm::verifyCommitmentEquality
  - 1 round
+
+PedersonComm::coinTossCommit
+ - 1 round
+
+PedersonComm::coinTossDecommit
+ - 2 rounds
 
 PedersonComm::combineShares
  - 1 round
  
 PedersonComm::shareRandomNumber
- - 1 round
+ > n PedersonComm::shareSender/shareReceiver
+ - 2n round
 
 PedersonComm::multiply
- - Exchange shares (1), commit to coin toss
+ - Exchange shares of poly (2n)
+ - Commit to coin toss (1)
  - Exchange ZKP commitments (1)
- - Open coin toss (1)
+ - Open coin toss (2)
  - Exchange responses (1)
-Summary: 4 rounds
+Summary: 5+2n rounds
 
 PedersonComm::plaintextExponentiate
  - 1 round
@@ -310,14 +328,26 @@ PedersonComm::plaintextExponentiate
 PedersonComm::plaintextBilinearExponentiate
  - 1 round
 
-PRF::compute
- > PedersonComm::shareRandomNumber
- > PedersonComm::multiply
- > PedersonComm::combineShares
- > PedersonComm::multiply
- > PedersonComm::plaintextExponentiate
- - 1+4+1+4+1=11 rounds
+PedersonComm::plaintextBilinearExponentiateSend/Recv
+ - 1 round
 
+PRF::computeExponent
+ > 1 PedersonComm::shareRandomNumber
+ > 2 PedersonComm::multiply
+ > 1 PedersonComm::combineShares
+ - (2n)+(10+4n)+1=6n+11
+
+PRF::compute
+ > PRF::computeExponent
+ > PedersonComm::plaintextBilinearExponentiate
+ - 6n+12 rounds
+
+PRF::computeSend
+ > PRF::computeExponent
+ > PedersonComm::plaintextBilinearExponentiateSend/Recv
+ - 6n+12 rounds
+
+# Deprecated
 BonehBoyenSignature::compute
  > PedersonComm::shareRandomNumber
  > PedersonComm::multiply
