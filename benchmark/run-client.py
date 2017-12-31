@@ -94,10 +94,11 @@ class RunClient (threading.Thread):
         res = []
         while len(res) < num_alleg:
             thresh = random.expovariate(1.0 / 5.0)
-            thresh = max(min(int(thresh), 20), 2)
-            num_copies = thresh
-            if random.random() < 0.5:
-                num_copies -= 1
+            thresh = max(min(int(thresh), 4), 2)
+            # num_copies = thresh
+            # if random.random() < 0.5:
+            #     num_copies -= 1
+            num_copies = 1
             meta_data = random.randint(0, 1000000)
             res += [(thresh, meta_data, random.randint(0, 1000)) for _ in range(num_copies)]
         random.shuffle(res)
@@ -129,9 +130,9 @@ class RunClient (threading.Thread):
             req_start_time = time.time()
             cmd = ['java', '-classpath', config['classpath'],
                    '-Djava.net.preferIPv4Stack=true',
+                   '-Djava.security.egd=file:/dev/./urandom',
                    '-Djava.library.path=%s' % config['lib_path'],
                    'client.Client', addr_str] + args
-            #print(' '.join(cmd))
             subprocess.call(cmd)
             req_elapsed_time = time.time() - req_start_time
             tot_elapsed_time = time.time() - start_time
@@ -146,10 +147,14 @@ class RunClient (threading.Thread):
         for thresh in range(2, max_bucket):
             key_filename = self.__get_keyfile()
             args = ['file', key_filename, str(thresh), '1', 'priming-allegation']
+            req_start_time = time.time()
             cmd = ['java', '-classpath', config['classpath'],
+                   '-Djava.net.preferIPv4Stack=true',
                    '-Djava.library.path=%s' % config['lib_path'],
                    'client.Client', addr_str] + args
             subprocess.call(cmd)
+            req_elapsed_time = time.time() - req_start_time
+            print("PERF REPID %d THRESH %d LAT %f" % (self.replica_id, thresh, req_elapsed_time))
 
 if __name__ == "__main__":
     init_params()
@@ -159,7 +164,7 @@ if __name__ == "__main__":
         clients.append(client)
 
     if params['prime'] and params['mode'] == 'file':
-        clients[0].prime_buckets(20)
+        clients[0].prime_buckets(5)
     for client in clients:
         client.start()
 

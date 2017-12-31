@@ -4,6 +4,7 @@ import argparse
 import json
 import pickle
 import random
+import re
 import socket
 import subprocess
 import sys
@@ -52,6 +53,18 @@ def error_exit(msg=''):
     close_sockets()
     exit(1)
 
+def used_ports():
+    res = {}
+    proc = subprocess.Popen(['netstat', '-n', '--protocol', 'inet'], stdout=subprocess.PIPE)
+    re_port = re.compile('.*[^0-9]([0-9]*)')
+    for line in proc.stdout.readlines():
+        if line.split()[0] not in ['tcp', 'tcp4', 'tcp6']:
+            continue
+        local_addr = line.split()[3]
+        port = int(re_port.match(local_addr).group(1))
+        res[port] = 1
+    return [x for x in res]
+
 def init_params():
     # Sort the addresses in lexicographic order to find id
     addrs = [config['this_addr']] + config['other_addr']
@@ -59,8 +72,21 @@ def init_params():
     params['addrs'] = addrs
     params['id'] = addrs.index(config['this_addr'])
     # Pick some random ports. If any of them isn't available, setup will fail
-    params['replica_addrs'] = [(config['this_addr'][0], random.randint(5000, 60000))
-                                for x in range(config['parallelism'])]
+    # params['replica_addrs'] = [(config['this_addr'][0], random.randint(5000, 60000))
+    #                             for x in range(config['parallelism'])]
+    params['replica_addrs'] = []
+    used = used_ports()
+    for x in range(config['parallelism']):
+        while True:
+            width = (60000 - 5000) / (len(params['addrs']) + 1)
+            port = random.randint(5000 + width * params['id'],
+                                  5000 + width * (params['id'] + 1)-1)
+            if port in used:
+                continue
+            used.append(port)
+            params['replica_addrs'].append((config['this_addr'][0], port))
+            break
+
     params['sql_addr'] = 'jdbc:mysql://localhost/?user=escrow%d&password=e%d&useSSL=false' % (
         params['id']+1, params['id'] + 1
     )
@@ -190,9 +216,9 @@ def wait_for_servers():
 
     while True:
         all_started = True
-        proc = subprocess.Popen(['lsof', '-iTCP', '-sTCP:LISTEN', '-n' ,'-P'], stdout=subprocess.PIPE)
         for replica in params['replica_addrs']:
             replica_found = False
+            proc = subprocess.Popen(['lsof', '-iTCP', '-sTCP:LISTEN', '-n' ,'-P'], stdout=subprocess.PIPE)
             for line in proc.stdout.readlines():
                 if line.find(str(replica[1])) != -1:
                     replica_found = True

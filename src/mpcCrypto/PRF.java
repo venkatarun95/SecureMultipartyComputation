@@ -100,7 +100,7 @@ public class PRF implements Serializable {
 
     private void readObject(java.io.ObjectInputStream stream) throws IOException, ClassNotFoundException {
         key = (PedersonShare)stream.readObject();
-        publicKey = PedersonShare.group.newElementFromBytes((byte[])stream.readObject());
+        publicKey = PedersonShare.groupG1.newElementFromBytes((byte[])stream.readObject());
         threshold = (int)stream.readObject();
     }
 }
