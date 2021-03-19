@@ -113,8 +113,8 @@ public class Test {
         // Compute an operation and open share
         PedersonShare resShare = val1.add(val2.constMultiply(new BigInteger("11")));
         BigInteger res = PedersonComm.combineShares(resShare, channels);
-        // if (res.intValue() != 241)
-        //     throw new RuntimeException("Error in linear operations. Test failed.");
+        if (res.intValue() != 241)
+            throw new RuntimeException("Error in linear operations. Test failed.");
 
         // Now multiply two values and open share
         PedersonShare mult = PedersonComm.multiply(val1, val2, channels);
@@ -134,7 +134,7 @@ public class Test {
 				PedersonShare prfVal = PedersonShare.shareConstValue(new BigInteger("3561345"), 2, 3)[val1.getIndex()-1];
 				PRF prf = new PRF(2, channels);
 				Element prfRes = prf.compute(prfVal, channels);
-				Element prfCheck = PedersonShare.genData_pp.pow(prf.revealKey(channels).add(new BigInteger("3561345")).modInverse(PedersonShare.modQ));
+				Element prfCheck = PedersonShare.genDataG1_pp.pow(prf.revealKey(channels).add(new BigInteger("3561345")).modInverse(PedersonShare.modQ));
 				if (!prfRes.isEqual(prfCheck))
 						throw new RuntimeException("Error in PRF computation. Computed incorrect value.");
 
