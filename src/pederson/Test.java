@@ -21,6 +21,7 @@ import edu.biu.scapi.exceptions.DuplicatePartyException;
 import it.unisa.dia.gas.jpbc.*;
 import it.unisa.dia.gas.plaf.jpbc.pairing.PairingFactory;
 
+import crypto.SchnorrZKP;
 import mpcCrypto.PRF;
 
 public class Test {
@@ -79,6 +80,13 @@ public class Test {
         Element gt = GT.newElementFromBytes(new byte[] {(byte)0x73, (byte)0xa8});
         g1.twice();
         gt.pow(BigInteger.valueOf(5));
+
+        // Test Schnorr ZKP
+        SchnorrZKP zkp = new SchnorrZKP(PedersonShare.genData, PedersonShare.modQ, new BigInteger("23409735"));
+        zkp.verify();
+        byte[][] zkp_ser = zkp.toByteArrays();
+        SchnorrZKP zkp_des = new SchnorrZKP(zkp_ser, PedersonShare.group);
+        zkp_des.verify();
 
         SecureRandom random = new SecureRandom();
         // Test linear operations
