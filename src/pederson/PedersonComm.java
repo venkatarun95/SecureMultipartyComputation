@@ -14,6 +14,7 @@ import edu.biu.scapi.primitives.hash.openSSL.OpenSSLSHA512;
 import it.unisa.dia.gas.jpbc.*;
 import it.unisa.dia.gas.plaf.jpbc.pairing.PairingFactory;
 
+import crypto.SchnorrZKP;
 import pederson.PedersonShare;
 
 /**
@@ -88,13 +89,15 @@ public class PedersonComm {
 
     /**
      * Utility function to recieve data from channel. Handy for
-     * handling exceptions from the @reference Channel.receive method
+     * handling exceptions from the @reference Channel.receive method.
+     *
+     * TODO: Check that the deserialization has the right type.
      */
+    @SuppressWarnings("unchecked")
     static private <T> T receive(Channel channel) throws IOException {
         assert channel != null;
         try {
-            Serializable res = channel.receive();
-            return (T)res;
+            return (T)channel.receive();
         }
         catch (ClassNotFoundException e) {
             throw new IOException(e.getMessage());
@@ -111,7 +114,7 @@ public class PedersonComm {
 						toSend[i] = elems[i].toBytes();
 				channel.send(toSend);
 		}
-		
+
 		/**
      * Utility function to receive array of elements from
      * channel. Handy for converting <code>byte[][]</code> to
@@ -553,20 +556,21 @@ public class PedersonComm {
 		 * Computes g ^ {shared value} where g is
 		 * <code>PedersonShare.genData</code>.
 		 */
-		public static Element plaintextExponentiate(PedersonShare share, Channel[] channels) throws IOException, CheatAttemptException {
+    public static Element plaintextExponentiate(PedersonShare share, Channel[] channels) throws IOException, CheatAttemptException {
+        BigInteger modQ = PedersonShare.modQ;
 				// Broadcast g^share and h^share
-				Element exp1 = PedersonShare.genData_pp.pow(share.valData);
-				Element exp2 = PedersonShare.genVerif_pp.pow(share.valVerif);
-				Element[] exp1s = new Element[channels.length];
-				Element[] exp2s = new Element[channels.length];
+				SchnorrZKP exp1 = new SchnorrZKP(PedersonShare.genData, modQ, share.valData);
+				SchnorrZKP exp2 = new SchnorrZKP(PedersonShare.genVerif, modQ, share.valVerif);
+				SchnorrZKP[] exp1s = new SchnorrZKP[channels.length];
+				SchnorrZKP[] exp2s = new SchnorrZKP[channels.length];
 				for (int i = 0; i < channels.length; ++i) {
 						if (channels[i] == null) {
 								exp1s[i] = exp1;
 								exp2s[i] = exp2;
 								continue;
 						}
-						channels[i].send(exp1.toBytes());
-						channels[i].send(exp2.toBytes());
+						channels[i].send(exp1.toByteArrays());
+						channels[i].send(exp2.toByteArrays());
 				}
 
 				// Get other people's 'broadcast's. Note we needn't check if
@@ -575,9 +579,11 @@ public class PedersonComm {
 				for (int i = 0; i < channels.length; ++i) {
 						if (channels[i] == null)
 								continue;
-						exp1s[i] = PedersonShare.group.newElementFromBytes((byte[])receive(channels[i]));
-						exp2s[i] = PedersonShare.group.newElementFromBytes((byte[])receive(channels[i]));
-						Element check = exp1s[i].duplicate().mul(exp2s[i]);
+						exp1s[i] = new SchnorrZKP(receive(channels[i]), PedersonShare.group);
+						exp2s[i] = new SchnorrZKP(receive(channels[i]), PedersonShare.group);
+            exp1s[i].verify();
+            exp2s[i].verify();
+						Element check = exp1s[i].a.duplicate().mul(exp2s[i].a);
 						if (!check.isEqual(share.computeMac(BigInteger.valueOf(i+1)))) {
 								System.err.println("Verification failed for party " + (i+1) + " during plaintext exponentiation.");
 								exp1s[i] = null;
@@ -586,7 +592,11 @@ public class PedersonComm {
 				}
 
 				// Interpolate in the exponent to get the result
-        return reconstructExponentiatedShares(exp1s, share.threshold, channels.length);
+        Element[] exps = new Element[exp1s.length];
+        for (int i = 0; i < exp1s.length; ++i) {
+            exps[i] = exp1s[i].a;
+        }
+        return reconstructExponentiatedShares(exps, share.threshold, channels.length);
 		}
 
     /**
@@ -711,10 +721,11 @@ public class PedersonComm {
      */
     public static Element plaintextBilinearExponentiate(PedersonShare share, Channel[] channels) throws IOException {
 				// Broadcast g^share and h^share
-				Element exp1 = PedersonShare.genDataG1_pp.pow(share.valData);
-				Element exp2 = PedersonShare.genVerifG1_pp.pow(share.valVerif);
-				Element[] exp1s = new Element[channels.length];
-				Element[] exp2s = new Element[channels.length];
+        BigInteger modQ = PedersonShare.modQ;
+				SchnorrZKP exp1 = new SchnorrZKP(PedersonShare.genDataG1, modQ, share.valData);
+				SchnorrZKP exp2 = new SchnorrZKP(PedersonShare.genVerifG1, modQ, share.valVerif);
+				SchnorrZKP[] exp1s = new SchnorrZKP[channels.length];
+				SchnorrZKP[] exp2s = new SchnorrZKP[channels.length];
 				for (int i = 0; i < channels.length; ++i) {
 						if (channels[i] == null) {
 								exp1s[i] = exp1;
@@ -722,8 +733,8 @@ public class PedersonComm {
 								continue;
 						}
 						//System.out.println(share.valData.toString());
-						channels[i].send(exp1.toBytes());
-						channels[i].send(exp2.toBytes());
+						channels[i].send(exp1.toByteArrays());
+						channels[i].send(exp2.toByteArrays());
 				}
 
 				// Get other people's 'broadcast's. Note we needn't check if
@@ -732,10 +743,12 @@ public class PedersonComm {
 				for (int i = 0; i < channels.length; ++i) {
 						if (channels[i] == null)
 								continue;
-						exp1s[i] = PedersonShare.groupG1.newElementFromBytes((byte[])receive(channels[i]));
-						exp2s[i] = PedersonShare.groupG1.newElementFromBytes((byte[])receive(channels[i]));
-            Element paired1 = PedersonShare.pairing.pairing(exp1s[i], PedersonShare.genDataG1);
-            Element paired2 = PedersonShare.pairing.pairing(exp2s[i], PedersonShare.genVerifG1);
+						exp1s[i] = new SchnorrZKP(receive(channels[i]), PedersonShare.groupG1);
+						exp2s[i] = new SchnorrZKP(receive(channels[i]), PedersonShare.groupG1);
+            exp1s[i].verify();
+            exp2s[i].verify();
+            Element paired1 = PedersonShare.pairing.pairing(exp1s[i].a, PedersonShare.genDataG1);
+            Element paired2 = PedersonShare.pairing.pairing(exp2s[i].a, PedersonShare.genVerifG1);
 						Element check = paired1.duplicate().mul(paired2);
 						if (!check.isEqual(share.computeMac(BigInteger.valueOf(i+1)))) {
 								System.err.println("Verification failed for party " + (i+1) + " during plaintext exponentiation.");
@@ -745,7 +758,6 @@ public class PedersonComm {
 				}
 
 				// Interpolate in the exponent to get the result
-				BigInteger modQ = PedersonShare.modQ;
 				Element result = PedersonShare.groupG1.newElement(1);
 				int numUsed = 0;
         for (int i = 0; i < exp1s.length; ++i) {
@@ -765,89 +777,10 @@ public class PedersonComm {
                 coeff = coeff.multiply(BigInteger.valueOf(j - i - 1).modInverse(modQ)).mod(modQ);
             }
 						//System.out.println(i + " " + coeff);
-            result.mul(exp1s[i].pow(coeff));
+            result.mul(exp1s[i].a.pow(coeff));
         }
 				if (numUsed < share.threshold)
 						throw new RuntimeException("Did not receive enough correct shares from others to exponentiate.");
 				return result;
     }
-
-    /**
-     * Computes generator ^ {shared value} (mod PedersonShare.modQ)
-     */
-    // public static BigInteger plaintextExponentiate(Element generator, PedersonShare share, Channel[] channels) throws IOException, CheatAttemptException {
-        // TODO: Make sure generator is actually a generator of
-        // PedersonShare.modQ
-
-        // Share random number so we can check if result is actually
-        // correct (or if someone cheated).
-        // PedersonShare randNumShare = shareRandomNumber(share.threshold, channels);
-        // PedersonShare challengeShare = multiply(randNumShare, share, channels);
-
-
-        // // Broadcast g^{our share} and g^{challenge share}
-        // Element[] shareExps = new Element[channels.length];
-        // Element[] challengeExps = new Element[channels.length];
-        // Element ourShareExp = generator.duplicate.pow(share.valData);
-        // Element ourChallengeExp = generator.duplicate().pow(challengeShare.valData);
-
-        // for (int i = 0; i < channels.length; ++i) {
-        //     if (channels[i] != null) {
-        //         try {
-        //             channels[i].send(ourShareExp);
-        //             channels[i].send(ourChallengeExp);
-        //         }
-        //         catch (IOException e) {
-        //             throw new IOException("Could not communicate with peer " + i + " while sending message. Error: " + e.getMessage());
-        //         }
-        //     }
-        // }
-
-        // // Receive g^{share} and g^{challenge share} from others
-        // for (int i = 0; i < channels.length; ++i) {
-        //     if (channels[i] == null) {
-        //         shareExps[i] = ourShareExp;
-        //         challengeExps[i] = ourChallengeExp;
-        //     }
-        //     else {
-        //         try {
-        //             shareExps[i] = receive(channels[i]);
-        //             challengeExps[i] = receive(channels[i]);
-        //         }
-        //         catch (IOException e) {
-        //             throw new IOException("Could not communicate with peer " + i + " while receiving message. Error: " + e.getMessage());
-        //         }
-        //     }
-        // }
-
-        // // Reconstruct challenge random number
-        // BigInteger challenge = combineShares(randNumShare, channels);
-
-        // // Reconstruct the exponentiated value
-        // BigInteger result = reconstructExponentiatedShares(shareExps, share.threshold, channels.length);
-        // BigInteger challengeResult = reconstructExponentiatedShares(challengeExps, share.threshold, channels.length);
-
-        // if (result.pow(challenge).isEqual(challengeResult) != 0)
-        //     throw new CheatAttemptException("Reconstructed result did not pass verification.");
-        // return result;
-		//}
-
-    /**
-     * Compute shares of generator ^ {exponent}.
-     */
-    // public static PedersonShare exponentiate(PedersonShare generator, BigInteger exponent, Channel[] channels) throws IOException {
-    //     PedersonShare result = null;
-    //     // Equals generator^{2^i} in the loop
-    //     PedersonShare curExponent = generator;
-    //     for (int i = 0; i < exponent.bitLength(); ++i) {
-    //         if (exponent.testBit(i)) {
-    //             if (result == null)
-    //                 result = curExponent;
-    //             else
-    //                 result = PedersonComm.multiply(result, curExponent, channels);
-    //         }
-    //         curExponent = PedersonComm.multiply(curExponent, curExponent, channels);
-    //     }
-    //     return result;
-    // }
 }
