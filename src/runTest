@@ -1,15 +1,10 @@
 #!/bin/bash
 
-classpath=../scapi/assets/Scapi-2.4.jar::../scapi/assets/commons-exec-1.2.jar:../scapi/assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../scapi/assets/activemq-all-5.9.1.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar
-lib_path=../scapi/assets/:/usr/ssl/lib/
-export LD_LIBRARY_PATH=/usr/ssl/lib
+classpath=../assets/Scapi-2.4.jar::../assets/commons-exec-1.2.jar:../assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../scapi/assets/activemq-all-5.9.1.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar
+lib_path=../assets/:/usr/ssl/lib/
+export LD_LIBRARY_PATH=/usr/ssl/lib:../assets
 
-java -classpath $classpath -Djava.library.path=$lib_path pederson.Test socketParties0.properties >/tmp/p0 &
-java -classpath $classpath -Djava.library.path=$lib_path pederson.Test socketParties1.properties >/tmp/p1 &
-java -classpath $classpath -Djava.library.path=$lib_path pederson.Test socketParties2.properties >/tmp/p2&
-# java -classpath ../scapi/assets/Scapi-2.4.jar::../scapi/assets/commons-exec-1.2.jar:../scapi/assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar pederson.Test socketParties3.properties &
-# java -classpath ../scapi/assets/Scapi-2.4.jar::../scapi/assets/commons-exec-1.2.jar:../scapi/assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar pederson.Test socketParties4.properties &
+java -classpath $classpath -Djava.library.path=$lib_path pederson.Test socketProps0 >/tmp/p0 &
+java -classpath $classpath -Djava.library.path=$lib_path pederson.Test socketProps1 >/tmp/p1 &
+java -classpath $classpath -Djava.library.path=$lib_path pederson.Test socketProps2 >/tmp/p2 &
 
-# Use the followin in the src directory to compile:
-
-# javac -classpath ../scapi/assets/Scapi-2.4.jar::../scapi/assets/commons-exec-1.2.jar:../scapi/assets/bcprov-jdk16-146.jar:../lib/hamcrest-core-1.3.jar:../lib/jpbc-api-2.0.0.jar:../lib/jpbc-plaf-2.0.0.jar */*.java

@@ -95,7 +95,7 @@ public class PedersonMultiply {
         shares = PedersonShare.shareValue(a.valData.multiply(b.valData).mod(PedersonShare.modQ),
                                           a.threshold,
                                           numShares);
-				
+
         alpha = a.valData;
         rho = a.valVerif;
         beta = b.valData;
@@ -110,7 +110,7 @@ public class PedersonMultiply {
 
     /**
      * Produces random commitments that must be given to verifiers (if
-     * this player is the proover).<p>
+     * this player is the prover).<p>
      *
      * To tolerate malicious verifiers, the verifies must have
      * commited to a random challenge.
@@ -131,7 +131,7 @@ public class PedersonMultiply {
             mul(PedersonShare.genVerif_pp.pow(s1));
         result[2] = bShare.computeMac(bShare.index).pow(x).
             mul(PedersonShare.genVerif_pp.pow(s2));
-				
+
         state = State.ZKP_STEP1_DONE;
         return result;
     }
@@ -206,7 +206,7 @@ public class PedersonMultiply {
         Element check2Rhs = commitments[1].duplicate().mul(A.duplicate().pow(challenge));
         if (!check2Lhs.isEqual(check2Rhs))
             return false;
-				
+
         Element check3Lhs = B.duplicate().pow(response[2]).
 						mul(genVerif_pp.pow(response[4]));
         Element check3Rhs = commitments[2].duplicate().mul(C.duplicate().pow(challenge));

@@ -38,7 +38,7 @@ public class SchnorrZKP {
     public SchnorrZKP(Element a_gen, BigInteger a_modQ, BigInteger exp) {
         gen = a_gen.duplicate();
         modQ = a_modQ;
-        a = gen.pow(exp);
+        a = gen.duplicate().pow(exp);
         SecureRandom random = new SecureRandom();
         BigInteger v_exp = BigIntegers.createRandomInRange(BigInteger.ONE, modQ.subtract(BigInteger.ONE), random);
         v = gen.duplicate().pow(v_exp);
@@ -60,7 +60,8 @@ public class SchnorrZKP {
         if (!v.isEqual(check)) {
             // Throwing this exception is kinda important, but there is an
             // inexplicable bug where for ~1/2 of the choices of v_exp, this
-            // doesn't work. Since the only purpose of this repo is testing
+            // doesn't work. The scapi version I was using has changed
+            // significantly. Since the only purpose of this repo is testing
             // performance, disabling this check is ok. WARNING: DO NOT USE THIS
             // FOR ANYTHING SECURITY CRITICAL!
 
